@@ -153,7 +153,7 @@ green); color:var(--green); }
         <a href="#">Home</a>
         <a href="#" id="calculatorTab">Calculator</a>
         <a href="#" onclick="document.getElementById('aboutModal').style.display='flex';return false;">About</a>
-        <a href="#">Contact</a>
+        <a href="#" onclick="document.getElementById('contactModal').style.display='flex';return false;">Contact</a>
       </div>
     </div>
   </nav>
@@ -169,7 +169,7 @@ green); color:var(--green); }
   <section id="calculatorSection" style="display:none;">
     <div class="container">
       <div class="card">
-        <h2>Sharpe Ratio Calculator</h2>
+        <h2>Portfolio Optimizer</h2>
         <label for="tickers">Enter Tickers (comma separated):</label>
         <input type="text" id="tickers" placeholder="AAPL, MSFT, GOOG" />
         <label for="portfolioValue">Portfolio Value ($):</label>
@@ -190,6 +190,23 @@ green); color:var(--green); }
     <p style="font-size:1.08em;line-height:1.6;">
       InvestEdge is a research-driven portfolio tool built by three high-school students at the intersection of finance and computer science. Our platform uses a Max-Sharpe (risk-adjusted return) optimization framework—supported by back-testing and transparent data—to propose diversified portfolio weights and visualize risk/return trade-offs. Our goal is to help users make more informed investment decisions through clear, accessible analytics. InvestEdge is an educational resource and does not provide financial advice.
     </p>
+  </div>
+</div>
+
+<div id="contactModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(16,26,25,0.98); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:#101a19; color:#eaeaea; font-family:'Space Grotesk',Inter,Arial,sans-serif; max-width:600px; margin:auto; padding:32px 28px; border-radius:18px; box-shadow:0 8px 32px rgba(39,233,138,.12); position:relative;">
+    <button onclick="document.getElementById('contactModal').style.display='none'" style="position:absolute;top:18px;right:18px;background:none;border:none;font-size:1.5rem;color:#27e98a;cursor:pointer;">&times;</button>
+    <h2 style="color:#27e98a; margin-bottom:8px;">Contact Us</h2>
+    <div style="color:var(--muted); margin-bottom:18px; font-size:1.08em;">
+      We would love to hear your advice! Feel free to reach out about any questions or suggestions to make InvestEdge better!
+    </div>
+    <form id="contactForm" style="display:flex;flex-direction:column;gap:14px;">
+      <input type="text" id="contactName" placeholder="Your Name" required style="font-family:'Space Grotesk',Inter,Arial,sans-serif;">
+      <input type="email" id="contactEmail" placeholder="Your Email" required style="font-family:'Space Grotesk',Inter,Arial,sans-serif;">
+      <textarea id="contactMessage" rows="5" placeholder="Your Message" required style="font-family:'Space Grotesk',Inter,Arial,sans-serif;"></textarea>
+      <button type="submit" class="btn" style="width:auto;align-self:flex-end;">Send</button>
+      <div id="contactStatus" style="margin-top:8px;font-size:0.97em;"></div>
+    </form>
   </div>
 </div>
 
@@ -250,6 +267,17 @@ green); color:var(--green); }
       } catch (err) {
         document.getElementById('statusMessage').textContent = "Error: " + err.message;
       }
+    };
+
+    // Contact form handler
+    document.getElementById('contactForm').onsubmit = function(e) {
+      e.preventDefault();
+      const name = document.getElementById('contactName').value.trim();
+      const email = document.getElementById('contactEmail').value.trim();
+      const message = document.getElementById('contactMessage').value.trim();
+      const status = document.getElementById('contactStatus');
+      status.textContent = "Redirecting to your email client...";
+      window.location.href = `mailto:investedge8@gmail.com?subject=Contact from ${encodeURIComponent(name)}&body=Email: ${encodeURIComponent(email)}%0A%0A${encodeURIComponent(message)}`;
     };
   </script>
 </body>
