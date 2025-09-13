@@ -15,11 +15,11 @@ try:
 except Exception:
     _HAS_SKLEARN = False
 
-# ---------- Flask ----------
+# Flask 
 app = Flask(__name__, static_folder=".", static_url_path="")
 CORS(app)
 
-# ---------- Ticker normalization ----------
+# Ticker normalization 
 TICKER_FIXES = {
     "APPL": "AAPL",
     "TESLA": "TSLA",
@@ -43,7 +43,7 @@ def normalize_tickers(raw) -> List[str]:
             seen.add(t); out.append(t)
     return out
 
-# ---------- Data utilities ----------
+# Data utilities 
 def choose_interval_period(now: datetime) -> Tuple[str, str]:
     weekday = now.weekday()
     if weekday >= 5:
@@ -76,7 +76,7 @@ def bars_per_year(index: pd.DatetimeIndex) -> float:
     per_day = max(1, int(round((6.5 * 60) / diffs_min)))
     return 252.0 * per_day
 
-# ---------- Returns & estimators ----------
+# Returns & estimators 
 def simple_returns(prices: pd.DataFrame) -> pd.DataFrame:
     return prices.pct_change().dropna()
 
@@ -108,9 +108,8 @@ def robust_covariance(returns: pd.DataFrame) -> np.ndarray:
             pass
     return np.cov(returns.values, rowvar=False)
 
-# ---------- Optimizer ----------
+# Optimizer 
 def optimize_sharpe_positive_only(returns: pd.DataFrame, interval: str) -> np.ndarray:
-    # Stabilized expected returns
     mu_ew = exp_weighted_mean(returns, halflife=63)
     mu_spy = spy_mean_same_frequency(returns.index, interval)
     if mu_spy is None:
@@ -157,7 +156,7 @@ def optimize_sharpe_positive_only(returns: pd.DataFrame, interval: str) -> np.nd
         w = np.full(n, 1.0 / n)
     return w
 
-# ---------- Integer shares ----------
+# Integer shares 
 def allocate_integer_shares(tickers: List[str],
                             weights_raw: Dict[str, float],
                             last_prices: Dict[str, float],
@@ -168,7 +167,7 @@ def allocate_integer_shares(tickers: List[str],
     shares = (dollar_targets / prices).astype(int)
     return {t: int(s) for t, s in zip(tickers, shares)}
 
-# ---------- Backtests ----------
+# Backtests
 def backtest_static(prices: pd.DataFrame, weights: np.ndarray) -> Dict[str, float]:
     rets = prices.pct_change().dropna()
     if rets.empty:
@@ -183,7 +182,7 @@ def backtest_static(prices: pd.DataFrame, weights: np.ndarray) -> Dict[str, floa
         "sharpe": float((port.mean() * bpyr) / (port.std() * np.sqrt(bpyr))) if port.std() > 0 else 0.0
     }
 
-# ---------- Routes ----------
+# Routes 
 @app.route("/")
 def index():
     return send_from_directory(".", "index.html")
@@ -235,7 +234,7 @@ def optimize_api():
     }
     return jsonify(response)
 
-# ---------- Entrypoint ----------
+# Entrypoint 
 def main():
     print("Run with: python app.py web")
 
