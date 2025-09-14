@@ -1,6 +1,8 @@
 flask
 flask-cors
+gunicorn
 yfinance
 pandas
 numpy
 scipy
+scikit-learn
