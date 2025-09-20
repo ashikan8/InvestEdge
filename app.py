@@ -217,6 +217,23 @@ def allocate_integer_shares_largest_remainder(
 
     return ({t: int(s) for t, s in zip(tickers, base)}, None)
 
+def allocate_fractional_shares(
+    tickers: List[str],
+    weights_raw: Dict[str, float],
+    last_prices: Dict[str, float],
+    portfolio_value: float
+) -> Dict[str, float]:
+    # Calculate fractional shares for each ticker
+    shares = {}
+    for t in tickers:
+        price = last_prices.get(t, 0.0)
+        weight = weights_raw.get(t, 0.0)
+        if price > 0:
+            shares[t] = round((portfolio_value * weight) / price, 4)
+        else:
+            shares[t] = 0.0
+    return shares
+
 # Backtest (simple static buy & hold over available window) 
 def backtest_static(prices: pd.DataFrame, weights: np.ndarray) -> Dict[str, float]:
     rets = prices.pct_change().dropna()
@@ -273,22 +290,10 @@ def optimize_api():
     # Last prices for ALL tickers (0.0 for invalid so .toFixed works in UI)
     last_prices = {t: (float(prices_df[t].iloc[-1]) if t in prices_df.columns else 0.0) for t in tickers}
 
-    # Integer shares (≥1 share each if feasible)
-    share_targets, alloc_err = allocate_integer_shares_largest_remainder(
-        tickers, weight_map_raw, last_prices, portfolio_value, require_one_each=True
+    # Fractional shares (partial stocks)
+    share_targets = allocate_fractional_shares(
+        tickers, weight_map_raw, last_prices, portfolio_value
     )
-    if alloc_err:
-        return jsonify({
-            "error": alloc_err,
-            "timestamp": str(prices_df.index[-1]),
-            "interval": "auto" if interval in ("30m", "1d") else interval,
-            "tickers_cleaned": tickers,
-            "invalid_tickers": invalid,
-            "weights": weights_display,
-            "weights_raw": weight_map_raw,
-            "last_prices": last_prices,
-            "share_targets": {t: 0 for t in tickers}
-        }), 400
 
     # Backtest
     static_bt = backtest_static(prices_df, np.array([weight_map_raw[t] for t in valid]))
