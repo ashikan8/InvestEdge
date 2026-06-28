@@ -101,22 +101,28 @@ def exp_weighted_mean(returns: pd.DataFrame, halflife: int = EW_HALFLIFE) -> pd.
     w = w / w.sum()
     return pd.Series(np.dot(w, returns.values), index=returns.columns)
 
-def spy_mean_same_frequency(returns_index: pd.DatetimeIndex, interval: str) -> Optional[float]:
-    """Mean per-bar return of SPY aligned to the same frequency as the panel."""
+def fetch_spy_returns(interval: str) -> Optional[pd.Series]:
+    """Download SPY once and compute its own bar-to-bar returns, for reuse across many lookback windows."""
     try:
         period = "5y" if interval == "1d" else "60d"
         spy = yf.download("SPY", interval=interval, period=period, progress=False, auto_adjust=False)["Adj Close"]
         spy = spy.ffill().dropna()
-        # Compute SPY's own bar-to-bar returns first, then restrict to the overlapping
-        # date range. Reindexing prices onto a different timestamp grid before
-        # differencing would forward-fill stale prices and manufacture artificial
-        # zero-return bars, diluting the mean toward 0.
-        rets = spy.pct_change().dropna()
-        start, end = returns_index.min(), returns_index.max()
-        rets = rets[(rets.index >= start) & (rets.index <= end)]
-        return float(rets.mean()) if len(rets) else None
+        return spy.pct_change().dropna()
     except Exception:
         return None
+
+def spy_mean_in_range(spy_rets: Optional[pd.Series], start, end) -> Optional[float]:
+    """Mean of an already-downloaded SPY return series restricted to [start, end].
+
+    Slicing SPY's own return series by date range (rather than reindexing SPY
+    prices onto the asset panel's timestamp grid before differencing) avoids
+    forward-filling stale prices and manufacturing artificial zero-return bars,
+    which would dilute the mean toward 0.
+    """
+    if spy_rets is None:
+        return None
+    window = spy_rets[(spy_rets.index >= start) & (spy_rets.index <= end)]
+    return float(window.mean()) if len(window) else None
 
 def robust_covariance(returns: pd.DataFrame) -> np.ndarray:
     """Ledoit-Wolf covariance; fallback to sample covariance if LW not available.
@@ -133,8 +139,12 @@ def robust_covariance(returns: pd.DataFrame) -> np.ndarray:
             pass
     return np.cov(returns.values, rowvar=False)
 
-# Optimizer 
-def optimize_max_sharpe_positive_assets(returns: pd.DataFrame, interval: str) -> np.ndarray:
+_SPY_RETS_UNSET = object()  # sentinel distinguishing "fetch it for me" from an explicit, already-failed None
+
+# Optimizer
+def optimize_max_sharpe_positive_assets(
+    returns: pd.DataFrame, interval: str, spy_rets=_SPY_RETS_UNSET
+) -> np.ndarray:
     """
     Max-Sharpe using stabilized expected returns:
       - mu = BLEND_ALPHA * EWMean(asset) + (1 - BLEND_ALPHA) * Mean(SPY)
@@ -145,10 +155,17 @@ def optimize_max_sharpe_positive_assets(returns: pd.DataFrame, interval: str) ->
           rather than by clipping the solver's output afterward, so the
           solver actually finds the best Sharpe ratio subject to the rule
           instead of being overridden post-hoc.
+
+    `spy_rets`: pass an already-downloaded SPY return series (or None, if a
+    fetch already failed) to avoid a fresh network call on every invocation —
+    important when this is called repeatedly inside a walk-forward backtest.
+    Omit it entirely to fetch fresh, for single-shot callers.
     """
     # Stabilized expected returns (per bar)
     mu_ew = exp_weighted_mean(returns, halflife=EW_HALFLIFE)
-    mu_spy = spy_mean_same_frequency(returns.index, interval)
+    if spy_rets is _SPY_RETS_UNSET:
+        spy_rets = fetch_spy_returns(interval)
+    mu_spy = spy_mean_in_range(spy_rets, returns.index.min(), returns.index.max())
     if mu_spy is None:
         mu = mu_ew.values
     else:
@@ -256,21 +273,72 @@ def allocate_fractional_shares(
             shares[t] = 0.0
     return shares
 
-# Backtest (simple static buy & hold over available window) 
-def backtest_static(prices: pd.DataFrame, weights: np.ndarray) -> Dict[str, float]:
-    rets = prices.pct_change().dropna()
-    if rets.empty:
-        return {"total_return": None, "cagr": None, "vol": None, "sharpe": None, "max_dd": None}
-    port = pd.Series(rets.values @ weights, index=rets.index)
-    bpyr = bars_per_year(rets.index)
-    curve = (1 + port).cumprod()
+EMPTY_BACKTEST_STATS = {"total_return": None, "cagr": None, "vol": None, "sharpe": None, "max_dd": None}
 
+def _backtest_stats(port: pd.Series, bpyr: float) -> Dict[str, float]:
+    """Summary stats (total return, CAGR, vol, Sharpe, max drawdown) for a bar-return series."""
+    if port.empty:
+        return dict(EMPTY_BACKTEST_STATS)
+    curve = (1 + port).cumprod()
     total_return = float(curve.iloc[-1] - 1.0)
-    cagr = float(curve.iloc[-1] ** (bpyr / len(curve)) - 1.0)
+    cagr = float(curve.iloc[-1] ** (bpyr / len(curve)) - 1.0) if curve.iloc[-1] > 0 else None
     vol = float(port.std() * np.sqrt(bpyr))
     sharpe = float((port.mean() * bpyr) / vol) if vol > 0 else 0.0
     max_dd = float(((curve - curve.cummax()) / curve.cummax()).min())
     return {"total_return": total_return, "cagr": cagr, "vol": vol, "sharpe": sharpe, "max_dd": max_dd}
+
+# In-sample fit (simple static buy & hold over the SAME window the optimizer was fit on)
+def backtest_static(prices: pd.DataFrame, weights: np.ndarray) -> Dict[str, float]:
+    """
+    NOTE: this measures fit quality, not predictive performance — the weights
+    were chosen specifically to maximize Sharpe over this exact window, so
+    this is mechanically guaranteed to look good. See backtest_walkforward
+    for an out-of-sample estimate.
+    """
+    rets = prices.pct_change().dropna()
+    if rets.empty:
+        return dict(EMPTY_BACKTEST_STATS)
+    port = pd.Series(rets.values @ weights, index=rets.index)
+    bpyr = bars_per_year(rets.index)
+    return _backtest_stats(port, bpyr)
+
+# Walk-forward (out-of-sample) backtest
+def backtest_walkforward(
+    prices: pd.DataFrame, interval: str, min_lookback_bars: int = 90
+) -> Dict[str, object]:
+    """
+    At each rebalance point, fit weights using only data strictly before that
+    point (no look-ahead), then hold those weights forward until the next
+    rebalance. Chaining these forward-only periods into one equity curve
+    gives an honest, out-of-sample estimate of how the strategy would have
+    performed — unlike backtest_static, which fits and tests on the same
+    window.
+    """
+    rets_full = simple_returns(prices)
+    n = len(rets_full)
+    if n <= min_lookback_bars:
+        return {**EMPTY_BACKTEST_STATS, "rebalances": 0}
+
+    bpyr = bars_per_year(rets_full.index)
+    rebalance_every = max(5, int(round(bpyr / 12)))  # ~monthly rebalancing, regardless of bar frequency
+
+    spy_rets = fetch_spy_returns(interval)  # fetch once, reuse across every rebalance window's fit
+
+    segments: List[pd.Series] = []
+    i = min_lookback_bars
+    rebalance_count = 0
+    while i < n:
+        train = rets_full.iloc[:i]  # strictly past data only relative to this rebalance point
+        weights = optimize_max_sharpe_positive_assets(train, interval, spy_rets=spy_rets)
+        rebalance_count += 1
+        j = min(i + rebalance_every, n)
+        hold = rets_full.iloc[i:j]
+        segments.append(pd.Series(hold.values @ weights, index=hold.index))
+        i = j
+
+    port = pd.concat(segments) if segments else pd.Series(dtype=float)
+    stats = _backtest_stats(port, bpyr)
+    return {**stats, "rebalances": rebalance_count, "out_of_sample_bars": int(len(port))}
 
 # Routes 
 @app.route("/")
@@ -322,8 +390,14 @@ def optimize_api():
         tickers, weight_map_raw, last_prices, portfolio_value
     )
 
-    # Backtest
-    static_bt = backtest_static(prices_df, np.array([weight_map_raw[t] for t in valid]))
+    # Backtests: in-sample fit quality vs. an honest out-of-sample estimate.
+    # backtest_in_sample fits and tests on the same window, so it always looks
+    # good — it measures how well the optimizer fit the data, not how it would
+    # have performed going forward. backtest_walkforward refits on a rolling
+    # basis using only past data at each rebalance, so it's the number that
+    # should actually inform a real decision.
+    in_sample_bt = backtest_static(prices_df, np.array([weight_map_raw[t] for t in valid]))
+    walkforward_bt = backtest_walkforward(prices_df, interval)
 
     response = {
         "timestamp": str(prices_df.index[-1]),
@@ -334,7 +408,8 @@ def optimize_api():
         "weights_raw": weight_map_raw,  # debug detail
         "last_prices": last_prices,
         "share_targets": share_targets,
-        "backtest_static": static_bt
+        "backtest_in_sample": in_sample_bt,
+        "backtest_walkforward": walkforward_bt
     }
     return jsonify(response)
 
