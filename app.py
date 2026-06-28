@@ -2,6 +2,7 @@ import os
 import sys
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -18,6 +19,7 @@ except Exception:
 
 EW_HALFLIFE = 63      # bars (~3 months if daily)
 BLEND_ALPHA = 0.60    # 60% asset EW mean, 40% SPY mean
+MARKET_TZ = ZoneInfo("America/New_York")  # market-hours check must use ET, not server local time
 
 # Flask 
 app = Flask(__name__, static_folder=".", static_url_path="")
@@ -50,17 +52,17 @@ def normalize_tickers(raw) -> List[str]:
 
 #Time & data utilities 
 def choose_interval_period(now: datetime) -> Tuple[str, str]:
-    """Use 30m during market hours, otherwise 1d (longer history for daily)."""
+    """Use 30m during market hours, otherwise 1d (longer history for daily). `now` must be tz-aware in MARKET_TZ."""
     weekday = now.weekday()
     if weekday >= 5:
         return "1d", "5y"
-    m_open  = datetime.strptime("09:30", "%H:%M").time()
-    m_close = datetime.strptime("16:00", "%H:%M").time()
+    m_open  = now.replace(hour=9, minute=30, second=0, microsecond=0).time()
+    m_close = now.replace(hour=16, minute=0, second=0, microsecond=0).time()
     return ("30m", "60d") if (m_open <= now.time() <= m_close) else ("1d", "5y")
 
 def get_price_data(tickers: List[str]) -> Tuple[pd.DataFrame, str]:
     """Download Adj Close (total return), forward-fill small gaps, drop leading NaNs."""
-    interval, period = choose_interval_period(datetime.now())
+    interval, period = choose_interval_period(datetime.now(MARKET_TZ))
     try:
         raw = yf.download(tickers, interval=interval, period=period, progress=False, auto_adjust=False)
         data = raw["Adj Close"]
@@ -105,15 +107,26 @@ def spy_mean_same_frequency(returns_index: pd.DatetimeIndex, interval: str) -> O
         period = "5y" if interval == "1d" else "60d"
         spy = yf.download("SPY", interval=interval, period=period, progress=False, auto_adjust=False)["Adj Close"]
         spy = spy.ffill().dropna()
-        spy = spy.reindex(returns_index, method="ffill").dropna()
+        # Compute SPY's own bar-to-bar returns first, then restrict to the overlapping
+        # date range. Reindexing prices onto a different timestamp grid before
+        # differencing would forward-fill stale prices and manufacture artificial
+        # zero-return bars, diluting the mean toward 0.
         rets = spy.pct_change().dropna()
+        start, end = returns_index.min(), returns_index.max()
+        rets = rets[(rets.index >= start) & (rets.index <= end)]
         return float(rets.mean()) if len(rets) else None
     except Exception:
         return None
 
 def robust_covariance(returns: pd.DataFrame) -> np.ndarray:
-    """Ledoit–Wolf covariance; fallback to sample covariance if LW not available."""
-    if _HAS_SKLEARN and returns.shape[0] >= returns.shape[1]:
+    """Ledoit-Wolf covariance; fallback to sample covariance if LW not available.
+
+    Shrinkage helps most exactly when sample size is small relative to the
+    number of assets (sample covariance is then ill-conditioned/singular), so
+    it must not be gated behind "enough samples" — that would skip shrinkage
+    precisely when it's needed.
+    """
+    if _HAS_SKLEARN:
         try:
             return LedoitWolf().fit(returns.values).covariance_
         except Exception:
@@ -126,8 +139,12 @@ def optimize_max_sharpe_positive_assets(returns: pd.DataFrame, interval: str) ->
     Max-Sharpe using stabilized expected returns:
       - mu = BLEND_ALPHA * EWMean(asset) + (1 - BLEND_ALPHA) * Mean(SPY)
       - Sigma = Ledoit–Wolf covariance (fallback: sample)
-    Rule: set weight = 0 only for assets with non-positive expected return.
-          All assets with positive expected return get > 0 weight.
+    Rule: assets with non-positive expected return are excluded (weight pinned
+          to 0). Assets with positive expected return get a minimum floor
+          weight (eps). This rule is enforced via the optimizer's own bounds
+          rather than by clipping the solver's output afterward, so the
+          solver actually finds the best Sharpe ratio subject to the rule
+          instead of being overridden post-hoc.
     """
     # Stabilized expected returns (per bar)
     mu_ew = exp_weighted_mean(returns, halflife=EW_HALFLIFE)
@@ -139,11 +156,18 @@ def optimize_max_sharpe_positive_assets(returns: pd.DataFrame, interval: str) ->
 
     Sigma = robust_covariance(returns)
     n = len(mu)
+    eps = 1e-6
+    positive = mu > 0
 
-    # Long-only, fully invested
-    bounds = tuple((0.0, 1.0) for _ in range(n))
+    if not np.any(positive):
+        # No asset has a positive expected return; nothing to optimize toward.
+        return np.full(n, 1.0 / n)
+
+    # Long-only, fully invested. Non-positive-mu assets get a fixed (0, 0)
+    # bound; positive-mu assets get (eps, 1.0) so they can never collapse to 0.
+    bounds = tuple((eps, 1.0) if positive[i] else (0.0, 0.0) for i in range(n))
     cons = [{"type": "eq", "fun": lambda w: np.sum(w) - 1.0}]
-    x0 = np.full(n, 1.0 / n)
+    x0 = np.where(positive, 1.0 / positive.sum(), 0.0)
 
     def neg_sharpe(w):
         ret = float(w @ mu)
@@ -161,19 +185,9 @@ def optimize_max_sharpe_positive_assets(returns: pd.DataFrame, interval: str) ->
     else:
         w = np.clip(res.x, 0.0, 1.0)
 
-    eps = 1e-6
-    for i in range(n):
-        if mu[i] <= 0:
-            w[i] = 0.0
-        elif w[i] <= eps:
-            w[i] = eps
-
-    # Re-normalize to sum to 1
+    # Re-normalize to absorb floating-point drift only; bounds already enforce the rule.
     s = w.sum()
-    if s > 0:
-        w = w / s
-    else:
-        w = np.full(n, 1.0 / n)
+    w = w / s if s > 0 else x0.copy()
 
     return w
 
@@ -189,25 +203,33 @@ def allocate_integer_shares_largest_remainder(
     if np.any(prices <= 0):
         return {t: 0 for t in tickers}, "Some tickers have invalid (non-positive) prices."
 
+    w = np.array([weights_raw[t] for t in tickers], dtype=float)
+    # Only tickers the optimizer actually assigned a weight to count as "held
+    # positions" — require_one_each must not force a share of a ticker the
+    # optimizer deliberately zeroed out.
+    active = w > 0
+
     if require_one_each:
-        min_cost = float(np.sum(prices))
+        min_cost = float(np.sum(prices[active]))
         if portfolio_value + 1e-9 < min_cost:
             return ({t: 0 for t in tickers},
-                    f"Portfolio value (${portfolio_value:,.2f}) is less than cost of one share of each (${min_cost:,.2f}).")
+                    f"Portfolio value (${portfolio_value:,.2f}) is less than cost of one share of each held position (${min_cost:,.2f}).")
 
-    w = np.array([weights_raw[t] for t in tickers], dtype=float)
     dollar_targets = portfolio_value * w
     frac_shares = dollar_targets / prices
 
-    # baseline: 1 each if required, else floor
-    base = np.maximum(1, np.floor(frac_shares)).astype(int) if require_one_each else np.floor(frac_shares).astype(int)
+    # baseline: 1 each for active positions if required, else floor
+    if require_one_each:
+        base = np.where(active, np.maximum(1, np.floor(frac_shares)), 0).astype(int)
+    else:
+        base = np.floor(frac_shares).astype(int)
     spent = float(np.sum(base * prices))
     cash_left = portfolio_value - spent
 
     remainders = frac_shares - base
-    min_price = float(np.min(prices))
+    min_price = float(np.min(prices[active])) if active.any() else float(np.min(prices))
     while cash_left >= min_price - 1e-9:
-        affordable = np.where(prices <= cash_left + 1e-9)[0]
+        affordable = np.where(active & (prices <= cash_left + 1e-9))[0]
         if affordable.size == 0:
             break
         idx = affordable[np.argmax(remainders[affordable])]
@@ -259,7 +281,12 @@ def index():
 def optimize_api():
     payload = request.get_json(force=True) or {}
     tickers = normalize_tickers(payload.get("tickers", ""))
-    portfolio_value = float(payload.get("portfolio_value", 100000))
+    try:
+        portfolio_value = float(payload.get("portfolio_value", 100000))
+    except (TypeError, ValueError):
+        return jsonify({"error": "portfolio_value must be a number."}), 400
+    if portfolio_value <= 0:
+        return jsonify({"error": "portfolio_value must be positive."}), 400
 
     if not tickers:
         return jsonify({"error": "No tickers provided."}), 400
@@ -314,4 +341,5 @@ def optimize_api():
 # Entrypoint (Railway binds PORT)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").strip().lower() in ("1", "true", "yes")
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)
