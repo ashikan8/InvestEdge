@@ -138,6 +138,44 @@ green); color:var(--green); }
 .table-results tr:last-child {
   border-bottom: none;
 }
+
+    /* ── History ────────────────────────────────────────── */
+    #historySection{ margin-top:24px; }
+    .history-header{
+      display:flex; align-items:center; justify-content:space-between;
+      margin-bottom:12px;
+    }
+    .history-header h3{ margin:0; color:var(--green); font-family:"Space Grotesk",Inter; }
+    .btn-clear{
+      background:none; border:1px solid var(--border); color:var(--muted);
+      padding:6px 14px; border-radius:8px; cursor:pointer; font-size:.85rem;
+      font-family:"Space Grotesk",Inter; font-weight:600; width:auto;
+      transition: border-color .15s, color .15s;
+    }
+    .btn-clear:hover{ border-color:#e55; color:#e55; }
+    .history-empty{ color:var(--muted); font-size:.95rem; text-align:center; padding:24px 0; }
+    .history-item{
+      background: rgba(255,255,255,.025);
+      border:1px solid var(--border);
+      border-radius:10px; margin-bottom:8px; overflow:hidden;
+    }
+    .history-item-header{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px; cursor:pointer;
+      transition: background .15s;
+    }
+    .history-item-header:hover{ background: rgba(39,233,138,.06); }
+    .history-meta{ display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+    .history-tickers{
+      font-family:"JetBrains Mono", monospace; color:var(--green);
+      font-weight:600; font-size:.95rem;
+    }
+    .history-value{ color:var(--muted); font-size:.88rem; }
+    .history-date{ color:var(--muted); font-size:.82rem; margin-left:auto; white-space:nowrap; }
+    .history-chevron{ color:var(--muted); font-size:.85rem; margin-left:12px; transition: transform .2s; }
+    .history-item.open .history-chevron{ transform: rotate(90deg); }
+    .history-body{ display:none; padding:0 16px 16px; }
+    .history-item.open .history-body{ display:block; }
   </style>
 </head>
 <body>
@@ -150,6 +188,7 @@ green); color:var(--green); }
       <div class="links">
         <a href="#">Home</a>
         <a href="#" id="calculatorTab">Calculator</a>
+        <a href="#" id="historyTab">History</a>
         <a href="#" onclick="document.getElementById('aboutModal').style.display='flex';return false;">About</a>
         <a href="#" onclick="document.getElementById('contactModal').style.display='flex';return false;">Contact</a>
       </div>
@@ -177,6 +216,19 @@ green); color:var(--green); }
         </div>
         <div class="status" id="statusMessage"></div>
         <div id="allocationResults"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- History section (shown below calculator once there's data) -->
+  <section id="historySection" style="display:none;">
+    <div class="container">
+      <div class="card">
+        <div class="history-header">
+          <h3>Optimization History</h3>
+          <button class="btn-clear" id="clearHistoryBtn">Clear History</button>
+        </div>
+        <div id="historyList"></div>
       </div>
     </div>
   </section>
@@ -209,18 +261,114 @@ green); color:var(--green); }
 </div>
 
   <script>
-    // Show calculator when Get Started or Calculator tab is clicked
+    // ── History helpers ──────────────────────────────────────────────
+    const HISTORY_KEY = 'investedge_history';
+    const MAX_HISTORY = 20;
+
+    function loadHistory() {
+      try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+      catch { return []; }
+    }
+
+    function saveHistory(entries) {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
+    }
+
+    function buildResultTable(data, portfolioValue) {
+      let html = `<table class="table-results">
+        <tr>
+          <th>Ticker</th><th>Weight (%)</th><th>Shares to Buy</th>
+          <th>Last Price ($)</th><th>Dollar Allocation ($)</th>
+        </tr>`;
+      for (const t in data.weights) {
+        const weight = data.weights[t];
+        const shares = data.share_targets[t];
+        const price  = data.last_prices[t];
+        const dollar = (weight * portfolioValue).toFixed(2);
+        html += `<tr>
+          <td>${t}</td>
+          <td>${(weight*100).toFixed(2)}</td>
+          <td>${shares}</td>
+          <td>$${price.toFixed(2)}</td>
+          <td>$${dollar}</td>
+        </tr>`;
+      }
+      html += `</table>
+        <div style="margin-top:10px;font-size:0.95em;color:#27e98a;">
+          <b>Data as of:</b> ${data.timestamp} &nbsp; <b>Interval:</b> ${data.interval}
+        </div>`;
+      return html;
+    }
+
+    function renderHistory() {
+      const entries = loadHistory();
+      const section = document.getElementById('historySection');
+      const list    = document.getElementById('historyList');
+
+      if (entries.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      section.style.display = 'block';
+      list.innerHTML = entries.slice().reverse().map((e, i) => {
+        const realIdx = entries.length - 1 - i; // index in original array for toggling
+        const pv = Number(e.portfolioValue).toLocaleString();
+        return `
+          <div class="history-item" id="hist-${realIdx}">
+            <div class="history-item-header" onclick="toggleHistory(${realIdx})">
+              <div class="history-meta">
+                <span class="history-tickers">${e.tickers}</span>
+                <span class="history-value">$${pv}</span>
+              </div>
+              <span class="history-date">${e.date}</span>
+              <span class="history-chevron">&#9654;</span>
+            </div>
+            <div class="history-body">${e.resultHtml}</div>
+          </div>`;
+      }).join('');
+    }
+
+    function toggleHistory(idx) {
+      const el = document.getElementById('hist-' + idx);
+      el.classList.toggle('open');
+    }
+
+    // ── Calculator show/hide ─────────────────────────────────────────
     document.getElementById('getStartedBtn').onclick = () => {
       document.getElementById('calculatorSection').style.display = 'block';
+      renderHistory();
       window.scrollTo(0, document.getElementById('calculatorSection').offsetTop);
     };
     document.getElementById('calculatorTab').onclick = (e) => {
       e.preventDefault();
       document.getElementById('calculatorSection').style.display = 'block';
+      renderHistory();
       window.scrollTo(0, document.getElementById('calculatorSection').offsetTop);
     };
 
-    // Optimize button handler
+    // History nav tab
+    document.getElementById('historyTab').onclick = (e) => {
+      e.preventDefault();
+      document.getElementById('calculatorSection').style.display = 'block';
+      renderHistory();
+      const hs = document.getElementById('historySection');
+      if (hs.style.display !== 'none') {
+        window.scrollTo({ top: hs.offsetTop, behavior: 'smooth' });
+      } else {
+        window.scrollTo({ top: document.getElementById('calculatorSection').offsetTop, behavior: 'smooth' });
+      }
+    };
+
+    // Clear history button
+    document.getElementById('clearHistoryBtn').onclick = () => {
+      if (confirm('Clear all optimization history?')) {
+        saveHistory([]);
+        renderHistory();
+      }
+    };
+
+    // ── Optimize button ──────────────────────────────────────────────
     document.getElementById('optimizeBtn').onclick = async () => {
       const tickers = document.getElementById('tickers').value;
       const portfolioValue = document.getElementById('portfolioValue').value;
@@ -235,37 +383,34 @@ green); color:var(--green); }
         if (!res.ok) throw new Error("Optimization failed");
         const data = await res.json();
         document.getElementById('statusMessage').textContent = "Optimization complete!";
-        let html = `<h3 style="margin-bottom:10px;">Suggested Allocation</h3>
-  <table class="table-results">
-    <tr>
-      <th>Ticker</th>
-      <th>Weight (%)</th>
-      <th>Shares to Buy</th>
-      <th>Last Price ($)</th>
-      <th>Dollar Allocation ($)</th>
-    </tr>`;
-        for (const t in data.weights) {
-          const weight = data.weights[t];
-          const shares = data.share_targets[t];
-          const price = data.last_prices[t];
-          const dollar = (weight * portfolioValue).toFixed(2);
-          html += `<tr>
-            <td>${t}</td>
-            <td>${(weight*100).toFixed(2)}</td>
-            <td>${shares}</td>
-            <td>$${price.toFixed(2)}</td>
-            <td>$${dollar}</td>
-          </tr>`;
-        }
-        html += `</table>
-          <div style="margin-top:10px;font-size:0.95em;color:#27e98a;">
-            <b>Data as of:</b> ${data.timestamp} &nbsp; <b>Interval:</b> ${data.interval}
-          </div>`;
-        document.getElementById('allocationResults').innerHTML = html;
+
+        const tableHtml = buildResultTable(data, portfolioValue);
+        document.getElementById('allocationResults').innerHTML =
+          `<h3 style="margin-bottom:10px;">Suggested Allocation</h3>${tableHtml}`;
+
+        // Save to history
+        const entries = loadHistory();
+        entries.push({
+          date: new Date().toLocaleString(),
+          tickers: tickers.toUpperCase(),
+          portfolioValue,
+          resultHtml: tableHtml,
+          raw: data
+        });
+        if (entries.length > MAX_HISTORY) entries.splice(0, entries.length - MAX_HISTORY);
+        saveHistory(entries);
+        renderHistory();
+
       } catch (err) {
         document.getElementById('statusMessage').textContent = "Error: " + err.message;
       }
     };
+
+    // On page load: if history exists, show the history section immediately
+    if (loadHistory().length > 0) {
+      document.getElementById('calculatorSection').style.display = 'block';
+      renderHistory();
+    }
 
     // Contact form handler
     document.getElementById('contactForm').onsubmit = function(e) {
