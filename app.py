@@ -20,6 +20,9 @@ except Exception:
 EW_HALFLIFE = 63      # bars (~3 months if daily)
 BLEND_ALPHA = 0.60    # 60% asset EW mean, 40% SPY mean
 MARKET_TZ = ZoneInfo("America/New_York")  # market-hours check must use ET, not server local time
+RISK_FREE_ANNUAL = 0.02   # annualized risk-free rate used in every Sharpe calculation
+DEFAULT_TARGET_VOL = 0.15  # fallback annualized vol target for the "max return for target risk" strategy
+STRATEGIES = ("max_sharpe", "min_variance", "risk_parity", "max_return_target_risk")
 
 # Flask 
 app = Flask(__name__, static_folder=".", static_url_path="")
@@ -50,7 +53,20 @@ def normalize_tickers(raw) -> List[str]:
             seen.add(t); out.append(t)
     return out
 
-#Time & data utilities 
+def _parse_optional_fraction(value):
+    """Parse an optional fraction in (0, 1]. Returns None if unset, the float if
+    valid, or False if present but invalid (so the caller can return a 400)."""
+    if value is None or value == "":
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return False
+    if not (0.0 < f <= 1.0):
+        return False
+    return f
+
+#Time & data utilities
 def choose_interval_period(now: datetime) -> Tuple[str, str]:
     """Use 30m during market hours, otherwise 1d (longer history for daily). `now` must be tz-aware in MARKET_TZ."""
     weekday = now.weekday()
@@ -143,72 +159,135 @@ def robust_covariance(returns: pd.DataFrame) -> np.ndarray:
 
 _SPY_RETS_UNSET = object()  # sentinel distinguishing "fetch it for me" from an explicit, already-failed None
 
-# Optimizer
-def optimize_max_sharpe_positive_assets(
-    returns: pd.DataFrame, interval: str, spy_rets=_SPY_RETS_UNSET
-) -> np.ndarray:
-    """
-    Max-Sharpe using stabilized expected returns:
-      - mu = BLEND_ALPHA * EWMean(asset) + (1 - BLEND_ALPHA) * Mean(SPY)
-      - Sigma = Ledoit–Wolf covariance (fallback: sample)
-    Rule: assets with non-positive expected return are excluded (weight pinned
-          to 0). Assets with positive expected return get a minimum floor
-          weight (eps). This rule is enforced via the optimizer's own bounds
-          rather than by clipping the solver's output afterward, so the
-          solver actually finds the best Sharpe ratio subject to the rule
-          instead of being overridden post-hoc.
+def _blended_mu(returns: pd.DataFrame, interval: str, spy_rets) -> np.ndarray:
+    """Per-bar expected returns: BLEND_ALPHA * EWMean(asset) + (1-alpha) * Mean(SPY).
 
     `spy_rets`: pass an already-downloaded SPY return series (or None, if a
     fetch already failed) to avoid a fresh network call on every invocation —
-    important when this is called repeatedly inside a walk-forward backtest.
-    Omit it entirely to fetch fresh, for single-shot callers.
+    important inside the walk-forward backtest. Pass the _SPY_RETS_UNSET
+    sentinel to fetch fresh.
     """
-    # Stabilized expected returns (per bar)
     mu_ew = exp_weighted_mean(returns, halflife=EW_HALFLIFE)
     if spy_rets is _SPY_RETS_UNSET:
         spy_rets = fetch_spy_returns(interval)
     mu_spy = spy_mean_in_range(spy_rets, returns.index.min(), returns.index.max())
     if mu_spy is None:
-        mu = mu_ew.values
-    else:
-        mu = (BLEND_ALPHA * mu_ew.values) + ((1.0 - BLEND_ALPHA) * mu_spy)
+        return mu_ew.values
+    return (BLEND_ALPHA * mu_ew.values) + ((1.0 - BLEND_ALPHA) * mu_spy)
 
-    Sigma = robust_covariance(returns)
-    n = len(mu)
-    eps = 1e-6
-    positive = mu > 0
+def _effective_max_weight(n_active: int, requested: Optional[float]) -> Tuple[float, bool]:
+    """Clamp the per-asset cap so a long-only, fully-invested portfolio stays feasible.
 
-    if not np.any(positive):
-        # No asset has a positive expected return; nothing to optimize toward.
-        return np.full(n, 1.0 / n)
+    With n_active assets each capped at `cap`, weights can only sum to 1 when
+    n_active * cap >= 1. If the requested cap is too tight, raise it to 1/n_active
+    (equal weight). Returns (effective_cap, was_adjusted).
+    """
+    if requested is None or requested <= 0 or requested >= 1.0:
+        return 1.0, False
+    floor = 1.0 / n_active
+    if requested < floor - 1e-12:
+        return floor, True
+    return requested, False
 
-    # Long-only, fully invested. Non-positive-mu assets get a fixed (0, 0)
-    # bound; positive-mu assets get (eps, 1.0) so they can never collapse to 0.
-    bounds = tuple((eps, 1.0) if positive[i] else (0.0, 0.0) for i in range(n))
+def _solve_weights(objective, n: int, bounds, x0: np.ndarray, extra_constraints=None) -> np.ndarray:
+    """Run SLSQP for a long-only, fully-invested objective; clip + renormalize the result."""
     cons = [{"type": "eq", "fun": lambda w: np.sum(w) - 1.0}]
-    x0 = np.where(positive, 1.0 / positive.sum(), 0.0)
-
-    def neg_sharpe(w):
-        ret = float(w @ mu)
-        vol = float(np.sqrt(max(1e-16, w @ Sigma @ w)))
-        return -(ret / vol) if vol > 0 else 0.0
-
+    if extra_constraints:
+        cons += extra_constraints
     res = sco.minimize(
-        neg_sharpe, x0, method="SLSQP",
+        objective, x0, method="SLSQP",
         bounds=bounds, constraints=cons,
         options={"maxiter": 2000, "ftol": 1e-12}
     )
-
-    if (not res.success) or np.any(np.isnan(res.x)):
-        w = x0.copy()
-    else:
-        w = np.clip(res.x, 0.0, 1.0)
-
-    # Re-normalize to absorb floating-point drift only; bounds already enforce the rule.
+    w = np.array(x0, dtype=float) if ((not res.success) or np.any(np.isnan(res.x))) else np.asarray(res.x, dtype=float)
+    lo = np.array([b[0] for b in bounds]); hi = np.array([b[1] for b in bounds])
+    w = np.clip(w, lo, hi)
     s = w.sum()
-    w = w / s if s > 0 else x0.copy()
+    return w / s if s > 0 else np.full(n, 1.0 / n)
 
-    return w
+# Optimizer (long-only, fully invested, optional per-asset cap)
+def optimize_portfolio(
+    returns: pd.DataFrame,
+    interval: str,
+    strategy: str = "max_sharpe",
+    max_weight: Optional[float] = None,
+    target_vol: Optional[float] = None,
+    spy_rets=_SPY_RETS_UNSET,
+) -> Tuple[np.ndarray, Optional[str]]:
+    """
+    Returns (weights, note). `note` is an optional human-readable string, e.g.
+    when the max-weight cap had to be relaxed for feasibility.
+
+    strategy:
+      max_sharpe             - maximize (E[r] - rf) / vol; non-positive-mu assets
+                               are excluded (pinned to 0), the rest get a floor weight
+      min_variance           - global minimum-variance portfolio (ignores mu)
+      risk_parity            - equal risk contribution (ignores mu)
+      max_return_target_risk - maximize E[r] s.t. annualized vol <= target_vol
+    """
+    n = returns.shape[1]
+    Sigma = robust_covariance(returns)
+    bpyr = bars_per_year(returns.index)
+    rf_bar = RISK_FREE_ANNUAL / bpyr
+    eps = 1e-6
+
+    def cap_note(cap: float, count: int) -> str:
+        noun = "asset" if count == 1 else "assets"
+        return f"Max-weight cap raised to {cap:.0%} so {count} {noun} can sum to 100%."
+
+    # ----- strategies that ignore expected returns -----
+    if strategy == "min_variance":
+        cap, adj = _effective_max_weight(n, max_weight)
+        bounds = tuple((0.0, cap) for _ in range(n))
+        w = _solve_weights(lambda w: float(w @ Sigma @ w), n, bounds, np.full(n, 1.0 / n))
+        return w, (cap_note(cap, n) if adj else None)
+
+    if strategy == "risk_parity":
+        cap, adj = _effective_max_weight(n, max_weight)
+        bounds = tuple((eps, cap) for _ in range(n))  # floor keeps every risk contribution defined
+
+        def rp_obj(w):
+            contrib = w * (Sigma @ w)           # each asset's contribution to portfolio variance
+            return float(np.sum((contrib - contrib.mean()) ** 2))  # 0 when all contributions are equal
+
+        w = _solve_weights(rp_obj, n, bounds, np.full(n, 1.0 / n))
+        return w, (cap_note(cap, n) if adj else None)
+
+    # ----- strategies that depend on expected returns (mu) -----
+    mu = _blended_mu(returns, interval, spy_rets)
+
+    if strategy == "max_return_target_risk":
+        cap, adj = _effective_max_weight(n, max_weight)
+        bounds = tuple((0.0, cap) for _ in range(n))
+        tv = target_vol if (target_vol and target_vol > 0) else DEFAULT_TARGET_VOL
+        target_var_bar = (tv ** 2) / bpyr      # convert annualized vol target to per-bar variance
+        cons = [{"type": "ineq", "fun": lambda w: target_var_bar - float(w @ Sigma @ w)}]
+        w = _solve_weights(lambda w: -float(w @ mu), n, bounds, np.full(n, 1.0 / n), extra_constraints=cons)
+        realized_vol = float(np.sqrt(max(0.0, w @ Sigma @ w)) * np.sqrt(bpyr))
+        notes = []
+        if adj:
+            notes.append(f"max-weight cap raised to {cap:.0%} for feasibility")
+        if realized_vol > tv + 1e-4:
+            notes.append(f"target volatility {tv:.0%} not reachable; closest is {realized_vol:.0%}")
+        return w, ("; ".join(notes).capitalize() if notes else None)
+
+    # ----- default: max_sharpe -----
+    positive = mu > 0
+    if not np.any(positive):
+        return np.full(n, 1.0 / n), "No asset has a positive expected return; using equal weights."
+    n_pos = int(positive.sum())
+    cap, adj = _effective_max_weight(n_pos, max_weight)
+    # Non-positive-mu assets pinned to 0; positive-mu assets bounded in [eps, cap].
+    bounds = tuple((eps, cap) if positive[i] else (0.0, 0.0) for i in range(n))
+    x0 = np.where(positive, 1.0 / n_pos, 0.0)
+
+    def neg_sharpe(w):
+        ret = float(w @ mu) - rf_bar
+        vol = float(np.sqrt(max(1e-16, w @ Sigma @ w)))
+        return -(ret / vol) if vol > 0 else 0.0
+
+    w = _solve_weights(neg_sharpe, n, bounds, x0)
+    return w, (cap_note(cap, n_pos) if adj else None)
 
 # Integer share allocation (largest remainder, ≥1 each if feasible) 
 def allocate_integer_shares_largest_remainder(
@@ -285,7 +364,8 @@ def _backtest_stats(port: pd.Series, bpyr: float) -> Dict[str, float]:
     total_return = float(curve.iloc[-1] - 1.0)
     cagr = float(curve.iloc[-1] ** (bpyr / len(curve)) - 1.0) if curve.iloc[-1] > 0 else None
     vol = float(port.std() * np.sqrt(bpyr))
-    sharpe = float((port.mean() * bpyr) / vol) if vol > 0 else 0.0
+    # Sharpe uses an excess return over the risk-free rate: (annualized return - rf) / annualized vol.
+    sharpe = float((port.mean() * bpyr - RISK_FREE_ANNUAL) / vol) if vol > 0 else 0.0
     max_dd = float(((curve - curve.cummax()) / curve.cummax()).min())
     return {"total_return": total_return, "cagr": cagr, "vol": vol, "sharpe": sharpe, "max_dd": max_dd}
 
@@ -306,7 +386,12 @@ def backtest_static(prices: pd.DataFrame, weights: np.ndarray) -> Dict[str, floa
 
 # Walk-forward (out-of-sample) backtest
 def backtest_walkforward(
-    prices: pd.DataFrame, interval: str, min_lookback_bars: int = 90
+    prices: pd.DataFrame,
+    interval: str,
+    strategy: str = "max_sharpe",
+    max_weight: Optional[float] = None,
+    target_vol: Optional[float] = None,
+    min_lookback_bars: int = 90,
 ) -> Dict[str, object]:
     """
     At each rebalance point, fit weights using only data strictly before that
@@ -314,7 +399,8 @@ def backtest_walkforward(
     rebalance. Chaining these forward-only periods into one equity curve
     gives an honest, out-of-sample estimate of how the strategy would have
     performed — unlike backtest_static, which fits and tests on the same
-    window.
+    window. Uses the SAME strategy and constraints the user selected, so the
+    out-of-sample numbers describe the portfolio actually being recommended.
     """
     rets_full = simple_returns(prices)
     n = len(rets_full)
@@ -331,7 +417,10 @@ def backtest_walkforward(
     rebalance_count = 0
     while i < n:
         train = rets_full.iloc[:i]  # strictly past data only relative to this rebalance point
-        weights = optimize_max_sharpe_positive_assets(train, interval, spy_rets=spy_rets)
+        weights, _ = optimize_portfolio(
+            train, interval, strategy=strategy, max_weight=max_weight,
+            target_vol=target_vol, spy_rets=spy_rets
+        )
         rebalance_count += 1
         j = min(i + rebalance_every, n)
         hold = rets_full.iloc[i:j]
@@ -358,6 +447,17 @@ def optimize_api():
     if portfolio_value <= 0:
         return jsonify({"error": "portfolio_value must be positive."}), 400
 
+    strategy = (payload.get("strategy") or "max_sharpe")
+    if strategy not in STRATEGIES:
+        return jsonify({"error": f"Unknown strategy '{strategy}'. Expected one of {list(STRATEGIES)}."}), 400
+
+    max_weight = _parse_optional_fraction(payload.get("max_weight"))
+    if max_weight is False:
+        return jsonify({"error": "max_weight must be a number between 0 and 1."}), 400
+    target_vol = _parse_optional_fraction(payload.get("target_volatility"))
+    if target_vol is False:
+        return jsonify({"error": "target_volatility must be a number between 0 and 1."}), 400
+
     if not tickers:
         return jsonify({"error": "No tickers provided."}), 400
 
@@ -375,8 +475,10 @@ def optimize_api():
     if rets.empty:
         return jsonify({"error": "Insufficient return history for optimization.", "valid_tickers": valid}), 400
 
-    # Max-Sharpe with stabilized mu; only zero out non-positive mu 
-    weights_vec = optimize_max_sharpe_positive_assets(rets, interval)
+    # Optimize under the selected strategy and per-asset cap.
+    weights_vec, opt_note = optimize_portfolio(
+        rets, interval, strategy=strategy, max_weight=max_weight, target_vol=target_vol
+    )
 
     # Build maps aligned to requested order (0 for invalid)
     weight_map_raw = {t: 0.0 for t in tickers}
@@ -399,11 +501,15 @@ def optimize_api():
     # basis using only past data at each rebalance, so it's the number that
     # should actually inform a real decision.
     in_sample_bt = backtest_static(prices_df, np.array([weight_map_raw[t] for t in valid]))
-    walkforward_bt = backtest_walkforward(prices_df, interval)
+    walkforward_bt = backtest_walkforward(
+        prices_df, interval, strategy=strategy, max_weight=max_weight, target_vol=target_vol
+    )
 
     response = {
         "timestamp": str(prices_df.index[-1]),
         "interval": "auto" if interval in ("30m", "1d") else interval,
+        "strategy": strategy,
+        "note": opt_note,
         "tickers_cleaned": tickers,
         "invalid_tickers": invalid,
         "weights": weights_display,     # for UI

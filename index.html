@@ -174,26 +174,33 @@
         <div>
           <label class="block font-label-md text-label-md text-on-surface mb-2" for="strategy">Optimization Strategy</label>
           <select id="strategy" class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all appearance-none cursor-pointer">
-            <option>Maximize Sharpe Ratio</option>
-            <option>Minimize Variance (Global Minimum Variance)</option>
-            <option>Risk Parity</option>
-            <option>Maximize Return for Target Risk</option>
+            <option value="max_sharpe">Maximize Sharpe Ratio</option>
+            <option value="min_variance">Minimize Variance (Global Minimum Variance)</option>
+            <option value="risk_parity">Risk Parity</option>
+            <option value="max_return_target_risk">Maximize Return for Target Risk</option>
           </select>
+          <!-- Target volatility: only relevant for the "target risk" strategy -->
+          <div id="targetVolWrap" class="mt-3 hidden">
+            <label class="flex items-center gap-3">
+              <span class="font-body-md text-body-md">Target annual volatility</span>
+              <input id="targetVol" class="w-20 px-2 py-1 bg-surface border border-outline-variant rounded font-mono-data text-mono-data text-right" type="text" value="15%"/>
+            </label>
+          </div>
         </div>
         <!-- Constraints -->
         <div>
           <label class="block font-label-md text-label-md text-on-surface mb-2">Constraints</label>
           <div class="space-y-3">
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input checked class="rounded border-outline-variant text-[#2563EB] focus:ring-[#2563EB]" type="checkbox"/>
+            <label class="flex items-center gap-2" title="This optimizer is always long-only.">
+              <input checked disabled class="rounded border-outline-variant text-[#2563EB] focus:ring-[#2563EB]" type="checkbox"/>
               <span class="font-body-md text-body-md">Long only (weights &gt;= 0)</span>
             </label>
             <div class="flex items-center gap-4">
               <label class="flex items-center gap-2 cursor-pointer">
-                <input checked class="rounded border-outline-variant text-[#2563EB] focus:ring-[#2563EB]" type="checkbox"/>
+                <input id="maxWeightEnabled" checked class="rounded border-outline-variant text-[#2563EB] focus:ring-[#2563EB]" type="checkbox"/>
                 <span class="font-body-md text-body-md">Max weight per asset</span>
               </label>
-              <input class="w-20 px-2 py-1 bg-surface border border-outline-variant rounded font-mono-data text-mono-data text-right" type="text" value="30%"/>
+              <input id="maxWeight" class="w-20 px-2 py-1 bg-surface border border-outline-variant rounded font-mono-data text-mono-data text-right" type="text" value="30%"/>
             </div>
           </div>
         </div>
@@ -244,7 +251,7 @@
           </div>
           <div class="mt-4 p-3 bg-blue-50 border border-[#2563EB]/20 rounded-lg flex items-start gap-3">
             <span class="material-symbols-outlined text-[#2563EB] text-xl">insights</span>
-            <p class="font-body-sm text-body-sm text-[#1E3A8A]">This allocation maximizes risk-adjusted returns based on historical data covariance.</p>
+            <p id="insightText" class="font-body-sm text-body-sm text-[#1E3A8A]">This allocation maximizes risk-adjusted returns based on historical data covariance.</p>
           </div>
         </div>
       </div>
@@ -363,11 +370,27 @@
   const parseValue = (s) => Number(String(s).replace(/[^0-9.]/g, '')) || 0;
   const fmtMoney = (n) => '$' + Math.round(n).toLocaleString();
   const pct = (f) => (f * 100).toFixed(2) + '%';
+  // "30%" or "30" -> 0.30; returns null if blank/invalid so the backend default applies.
+  const pctToFraction = (s) => {
+    const n = parseValue(s);
+    if (!n) return null;
+    return n > 1 ? n / 100 : n;
+  };
+
+  // Show the target-volatility input only for the strategy that uses it.
+  function syncStrategyControls() {
+    const isTargetRisk = $('strategy').value === 'max_return_target_risk';
+    $('targetVolWrap').classList.toggle('hidden', !isTargetRisk);
+  }
+  $('strategy').addEventListener('change', syncStrategyControls);
 
   // ── Donut ────────────────────────────────────────────────────────
   function renderDonut(weights) {
     const svg = $('donutChart');
-    const entries = Object.entries(weights);
+    // Only chart assets with a real allocation; zero-weight (invalid/excluded)
+    // tickers would otherwise add empty slices and "TICKER 0%" legend entries
+    // and shift every color index.
+    const entries = Object.entries(weights).filter(([, w]) => w > 0);
     let offset = 0;
     let segs = `<circle cx="50" cy="50" fill="transparent" r="40" stroke="#f1f5f9" stroke-width="20"></circle>`;
     entries.forEach(([, w], i) => {
@@ -386,15 +409,31 @@
       </div>`).join('');
   }
 
-  // ── Metrics (from walk-forward backtest, falling back to in-sample) ──
+  // ── Metrics (prefer walk-forward, fall back to in-sample per-field) ──
   function renderMetrics(data) {
-    const bt = data.backtest_walkforward || data.backtest_in_sample || {};
-    const r = bt.cagr;          // annualized return
-    const v = bt.vol;           // annualized volatility
-    const s = bt.sharpe;        // sharpe ratio
+    const wf = data.backtest_walkforward || {};
+    const is = data.backtest_in_sample || {};
+    // backtest_walkforward is always present as an object, so a plain
+    // `wf || is` would never fall back; pick per-field instead, using the
+    // in-sample value only when the walk-forward field is null (e.g. when
+    // there wasn't enough history to run a walk-forward).
+    const pick = (k) => (wf[k] != null ? wf[k] : is[k]);
+    const r = pick('cagr');     // annualized return
+    const v = pick('vol');      // annualized volatility
+    const s = pick('sharpe');   // sharpe ratio
     $('metricReturn').textContent = r != null ? (r * 100).toFixed(1) + '%' : '—';
     $('metricVol').textContent = v != null ? (v * 100).toFixed(1) + '%' : '—';
     $('metricSharpe').textContent = s != null ? Number(s).toFixed(2) : '—';
+
+    const INSIGHTS = {
+      max_sharpe: 'Weights maximize the risk-adjusted return (Sharpe ratio) over historical data.',
+      min_variance: 'Weights minimize total portfolio volatility, ignoring expected returns.',
+      risk_parity: 'Weights equalize each asset’s contribution to total portfolio risk.',
+      max_return_target_risk: 'Weights maximize expected return while holding volatility near the target.'
+    };
+    let insight = INSIGHTS[data.strategy] || INSIGHTS.max_sharpe;
+    if (wf.sharpe == null) insight += ' (Metrics shown are in-sample; not enough history for a walk-forward test.)';
+    $('insightText').textContent = insight;
   }
 
   // ── Results table ────────────────────────────────────────────────
@@ -426,7 +465,9 @@
   const saveHistory = (e) => localStorage.setItem(HISTORY_KEY, JSON.stringify(e));
 
   function renderHistory() {
-    const entries = loadHistory();
+    // Drop any malformed or old-schema entries so one bad localStorage record
+    // can't throw and blank out the whole history view.
+    const entries = loadHistory().filter((e) => e && e.raw && e.raw.weights);
     const section = $('historySection');
     if (!entries.length) { section.classList.add('hidden'); return; }
     section.classList.remove('hidden');
@@ -473,16 +514,30 @@
   $('optimizeBtn').onclick = async () => {
     if (!tickers.length) { $('statusMessage').textContent = 'Add at least one ticker.'; return; }
     const portfolioValue = parseValue($('portfolioValue').value);
+    const body = {
+      tickers: tickers.join(','),
+      portfolio_value: portfolioValue,
+      strategy: $('strategy').value
+    };
+    // Only send a per-asset cap when the user has it enabled.
+    if ($('maxWeightEnabled').checked) {
+      const mw = pctToFraction($('maxWeight').value);
+      if (mw) body.max_weight = mw;
+    }
+    if ($('strategy').value === 'max_return_target_risk') {
+      const tv = pctToFraction($('targetVol').value);
+      if (tv) body.target_volatility = tv;
+    }
     $('statusMessage').textContent = 'Optimizing…';
     try {
       const res = await fetch('/optimize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tickers: tickers.join(','), portfolio_value: portfolioValue })
+        body: JSON.stringify(body)
       });
-      if (!res.ok) throw new Error('Optimization failed');
       const data = await res.json();
-      $('statusMessage').textContent = 'Optimization complete!';
+      if (!res.ok) throw new Error(data.error || 'Optimization failed');
+      $('statusMessage').textContent = data.note ? ('Done — ' + data.note) : 'Optimization complete!';
       lastResult = { data, portfolioValue };
       renderResults(data, portfolioValue);
 
@@ -590,6 +645,7 @@
   // ── Init ─────────────────────────────────────────────────────────
   renderChips();
   renderHistory();
+  syncStrategyControls();
 </script>
 </body>
 </html>
