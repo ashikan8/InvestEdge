@@ -6,4 +6,3 @@ pandas
 numpy
 scipy
 scikit-learn
-tzdata
