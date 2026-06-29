@@ -74,15 +74,15 @@
     <p class="font-label-md text-label-md text-on-surface-variant mt-1">Institutional Grade</p>
   </div>
   <div class="flex-1 flex flex-col gap-2 w-full">
-    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low" data-view="dashboard" href="#">
+    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-on-surface-variant hover:bg-surface-container-low" data-view="dashboard" href="#">
       <span class="material-symbols-outlined mr-3">dashboard</span>
       <span class="font-label-md text-label-md">Dashboard</span>
     </a>
-    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-primary font-bold border-l-4 border-primary pl-4 bg-surface-container-low" data-view="optimizer" href="#">
+    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-on-surface-variant hover:bg-surface-container-low" data-view="optimizer" href="#">
       <span class="material-symbols-outlined mr-3">tune</span>
       <span class="font-label-md text-label-md">Optimizer</span>
     </a>
-    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low" data-view="history" href="#">
+    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-on-surface-variant hover:bg-surface-container-low" data-view="history" href="#">
       <span class="material-symbols-outlined mr-3">account_balance_wallet</span>
       <span class="font-label-md text-label-md">History</span>
     </a>
@@ -97,14 +97,18 @@
     </button>
   </div>
   <div class="flex flex-col gap-2 w-full border-t border-outline-variant pt-4">
+    <div id="userBadge" class="hidden px-5 pb-1">
+      <p id="userBadgeName" class="font-label-md text-label-md text-on-surface truncate"></p>
+      <p id="userBadgeEmail" class="font-body-sm text-body-sm text-on-surface-variant truncate"></p>
+    </div>
     <a class="group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low" data-modal="contactModal" href="#">
       <span class="material-symbols-outlined mr-3">help</span>
       <span class="font-label-md text-label-md">Support</span>
     </a>
-    <a class="group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low" href="#">
-      <span class="material-symbols-outlined mr-3">logout</span>
-      <span class="font-label-md text-label-md">Sign Out</span>
-    </a>
+    <button id="authBtn" class="group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low w-full text-left">
+      <span id="authIcon" class="material-symbols-outlined mr-3">login</span>
+      <span id="authLabel" class="font-label-md text-label-md">Sign In</span>
+    </button>
   </div>
 </nav>
 
@@ -134,6 +138,7 @@
 
 <!-- Main workspace -->
 <main class="flex-1 lg:ml-64 pt-16 lg:pt-0 p-margin max-w-[1440px] mx-auto w-full">
+  <div id="dashboardView">
   <header class="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
     <div>
       <h2 class="font-headline-lg text-headline-lg text-primary">Portfolio Optimizer</h2>
@@ -285,9 +290,10 @@
       </div>
     </div>
   </div>
+  </div><!-- /dashboardView -->
 
   <!-- History -->
-  <section id="historySection" class="mt-gutter hidden">
+  <section id="historySection" class="hidden">
     <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow overflow-hidden">
       <div class="p-md border-b border-outline-variant flex justify-between items-center bg-surface-bright">
         <h4 class="font-label-md text-label-md text-on-surface">Optimization History</h4>
@@ -324,6 +330,20 @@
       <textarea id="contactMessage" rows="5" placeholder="Your Message" required class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"></textarea>
       <button type="submit" class="self-end px-6 bg-[#2563EB] hover:bg-[#1D4ED8] text-on-primary font-label-md text-label-md py-3 rounded transition-colors">Send</button>
       <div id="contactStatus" class="font-body-sm text-body-sm text-on-surface-variant"></div>
+    </form>
+  </div>
+</div>
+
+<!-- Login modal (local demo profile — stored only in this browser, no server account) -->
+<div id="loginModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/50 p-4">
+  <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow max-w-md w-full p-margin relative">
+    <button data-close-modal="loginModal" class="absolute top-5 right-5 text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    <h2 class="font-headline-md text-headline-md text-primary mb-1">Sign In</h2>
+    <p class="font-body-sm text-body-sm text-on-surface-variant mb-6">Demo sign-in — your profile is saved only in this browser. No password or server account required.</p>
+    <form id="loginForm" class="flex flex-col gap-4">
+      <input id="loginName" type="text" placeholder="Display Name" required class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
+      <input id="loginEmail" type="email" placeholder="Email" required class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
+      <button type="submit" class="self-end px-6 bg-[#2563EB] hover:bg-[#1D4ED8] text-on-primary font-label-md text-label-md py-3 rounded transition-colors">Sign In</button>
     </form>
   </div>
 </div>
@@ -468,9 +488,10 @@
     // Drop any malformed or old-schema entries so one bad localStorage record
     // can't throw and blank out the whole history view.
     const entries = loadHistory().filter((e) => e && e.raw && e.raw.weights);
-    const section = $('historySection');
-    if (!entries.length) { section.classList.add('hidden'); return; }
-    section.classList.remove('hidden');
+    if (!entries.length) {
+      $('historyList').innerHTML = '<p class="font-body-sm text-body-sm text-on-surface-variant text-center py-6">No optimizations yet — run one from the Optimizer and it will show up here.</p>';
+      return;
+    }
     $('historyList').innerHTML = entries.slice().reverse().map((e) => {
       const pv = Number(e.portfolioValue).toLocaleString();
       const tickerList = Object.keys(e.raw.weights).join(', ');
@@ -582,26 +603,39 @@
     } catch { $('statusMessage').textContent = 'No saved preset.'; }
   };
 
-  // ── Nav / modals ─────────────────────────────────────────────────
-  function scrollToHistory() {
-    renderHistory();
-    if (!$('historySection').classList.contains('hidden')) {
-      $('historySection').scrollIntoView({ behavior: 'smooth' });
-    }
+  // ── Views / nav ──────────────────────────────────────────────────
+  // "dashboard" and "optimizer" both show the main workspace; "history" shows
+  // the saved-runs view. Each nav item highlights itself when active.
+  function setNavActive(view) {
+    document.querySelectorAll('.nav-link[data-view]').forEach((l) => {
+      const active = l.dataset.view === view;
+      l.classList.toggle('bg-surface-container-low', active);
+      l.classList.toggle('text-primary', active);
+      l.classList.toggle('font-bold', active);
+      l.classList.toggle('text-on-surface-variant', !active);
+    });
+  }
+  function showView(view) {
+    const isHistory = view === 'history';
+    if (isHistory) renderHistory();
+    $('dashboardView').classList.toggle('hidden', isHistory);
+    $('historySection').classList.toggle('hidden', !isHistory);
+    setNavActive(view);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   document.querySelectorAll('.nav-link').forEach((link) => {
     link.addEventListener('click', (e) => {
-      e.preventDefault();
       const view = link.dataset.view;
+      if (!view) return;  // links without a view (e.g. About) are handled by the modal logic
+      e.preventDefault();
       closeMobile();
-      if (view === 'history') scrollToHistory();
-      else window.scrollTo({ top: 0, behavior: 'smooth' });
+      showView(view);
     });
   });
   $('newOptimizationBtn').onclick = () => {
-    $('resultsBody').innerHTML = '';
+    showView('optimizer');
+    $('resultsBody').innerHTML = '<tr><td colspan="5" class="p-8 text-center font-body-sm text-body-sm text-on-surface-variant">No results yet — enter tickers and click Optimize Portfolio.</td></tr>';
     $('statusMessage').textContent = '';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
     $('tickerInput').focus();
   };
 
@@ -621,7 +655,7 @@
       m.classList.add('hidden'); m.classList.remove('flex');
     });
   });
-  document.querySelectorAll('#aboutModal, #contactModal').forEach((m) => {
+  document.querySelectorAll('#aboutModal, #contactModal, #loginModal').forEach((m) => {
     m.addEventListener('click', (e) => {
       if (e.target === m) { m.classList.add('hidden'); m.classList.remove('flex'); }
     });
@@ -631,6 +665,41 @@
   const closeMobile = () => $('mobileMenu').classList.add('hidden');
   $('mobileMenuBtn').onclick = () => $('mobileMenu').classList.remove('hidden');
   document.querySelectorAll('[data-close-mobile]').forEach((el) => el.addEventListener('click', closeMobile));
+
+  // ── Auth (local demo profile, no server) ─────────────────────────
+  const USER_KEY = 'investedge_user';
+  const loadUser = () => { try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; } };
+  function renderAuth() {
+    const user = loadUser();
+    const signedIn = !!(user && user.name);
+    $('authLabel').textContent = signedIn ? 'Sign Out' : 'Sign In';
+    $('authIcon').textContent = signedIn ? 'logout' : 'login';
+    $('userBadge').classList.toggle('hidden', !signedIn);
+    if (signedIn) {
+      $('userBadgeName').textContent = user.name;
+      $('userBadgeEmail').textContent = user.email || '';
+    }
+  }
+  $('authBtn').onclick = () => {
+    if (loadUser()?.name) {                 // signed in → sign out
+      localStorage.removeItem(USER_KEY);
+      renderAuth();
+      $('statusMessage').textContent = 'Signed out.';
+    } else {                                // signed out → open login modal
+      const m = $('loginModal'); m.classList.remove('hidden'); m.classList.add('flex');
+    }
+  };
+  $('loginForm').onsubmit = (e) => {
+    e.preventDefault();
+    const name = $('loginName').value.trim();
+    const email = $('loginEmail').value.trim();
+    if (!name || !email) return;
+    localStorage.setItem(USER_KEY, JSON.stringify({ name, email }));
+    const m = $('loginModal'); m.classList.add('hidden'); m.classList.remove('flex');
+    $('loginForm').reset();
+    renderAuth();
+    $('statusMessage').textContent = 'Signed in as ' + name + '.';
+  };
 
   // ── Contact form ─────────────────────────────────────────────────
   $('contactForm').onsubmit = (e) => {
@@ -644,8 +713,9 @@
 
   // ── Init ─────────────────────────────────────────────────────────
   renderChips();
-  renderHistory();
   syncStrategyControls();
+  renderAuth();
+  showView('optimizer');
 </script>
 </body>
 </html>
