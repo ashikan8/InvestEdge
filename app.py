@@ -24,7 +24,7 @@ RISK_FREE_ANNUAL = 0.02   # annualized risk-free rate used in every Sharpe calcu
 DEFAULT_TARGET_VOL = 0.15  # fallback annualized vol target for the "max return for target risk" strategy
 STRATEGIES = ("max_sharpe", "min_variance", "risk_parity", "max_return_target_risk")
 
-# Flask 
+# Flask
 app = Flask(__name__, static_folder=".", static_url_path="")
 CORS(app)
 
