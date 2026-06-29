@@ -258,6 +258,10 @@
             <span class="material-symbols-outlined text-[#2563EB] text-xl">insights</span>
             <p id="insightText" class="font-body-sm text-body-sm text-[#1E3A8A]">This allocation maximizes risk-adjusted returns based on historical data covariance.</p>
           </div>
+          <div id="metricWarning" class="hidden mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-3">
+            <span class="material-symbols-outlined text-amber-600 text-xl">warning</span>
+            <p id="metricWarningText" class="font-body-sm text-body-sm text-amber-800"></p>
+          </div>
         </div>
       </div>
 
@@ -454,6 +458,15 @@
     let insight = INSIGHTS[data.strategy] || INSIGHTS.max_sharpe;
     if (wf.sharpe == null) insight += ' (Metrics shown are in-sample; not enough history for a walk-forward test.)';
     $('insightText').textContent = insight;
+
+    // Warn when a max-weight cap is actively constraining (hurting) the result.
+    const warnEl = $('metricWarning');
+    if (data.warning) {
+      $('metricWarningText').textContent = data.warning;
+      warnEl.classList.remove('hidden');
+    } else {
+      warnEl.classList.add('hidden');
+    }
   }
 
   // ── Results table ────────────────────────────────────────────────

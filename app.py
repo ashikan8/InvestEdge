@@ -273,13 +273,42 @@ def optimize_portfolio(
 
     # ----- default: max_sharpe -----
     positive = mu > 0
-    if not np.any(positive):
-        return np.full(n, 1.0 / n), "No asset has a positive expected return; using equal weights."
     n_pos = int(positive.sum())
-    cap, adj = _effective_max_weight(n_pos, max_weight)
-    # Non-positive-mu assets pinned to 0; positive-mu assets bounded in [eps, cap].
-    bounds = tuple((eps, cap) if positive[i] else (0.0, 0.0) for i in range(n))
-    x0 = np.where(positive, 1.0 / n_pos, 0.0)
+    notes: List[str] = []
+    capped = max_weight is not None and 0.0 < max_weight < 1.0
+
+    if not capped:
+        # No cap: exclude non-positive-mu assets, floor the survivors so they
+        # can't collapse to 0. If nothing has positive expected return, there's
+        # nothing to optimize toward.
+        if n_pos == 0:
+            return np.full(n, 1.0 / n), "No asset has a positive expected return; using equal weights."
+        active = positive
+        cap, lo = 1.0, eps
+    else:
+        # A per-asset cap is a diversification constraint: to have weights sum
+        # to 100% with each <= cap, at least ceil(1/cap) assets must be held.
+        # Honor the cap by WIDENING the active set to the best-ranked assets
+        # (by expected return) rather than silently relaxing the cap. Only
+        # relax the cap when there genuinely aren't enough assets to meet it.
+        k_needed = int(np.ceil(1.0 / max_weight))
+        if n < k_needed:
+            cap = 1.0 / n  # impossible to cap below this and still total 100%
+            n_active = n
+            notes.append(f"only {n} assets, so the cap was relaxed to {cap:.0%}")
+        else:
+            cap = max_weight
+            n_active = max(n_pos, k_needed)  # widen past positive-mu assets if the cap demands it
+        order = np.argsort(mu)[::-1]                 # highest expected return first
+        active = np.zeros(n, dtype=bool)
+        active[order[:n_active]] = True
+        if n_active > n_pos and n >= k_needed:
+            notes.append(f"added {n_active - n_pos} lower-ranked asset(s) so no holding exceeds {cap:.0%}")
+        lo = 0.0  # forced-in assets may go to 0; the sum + cap constraints still apply
+
+    na = int(active.sum())
+    bounds = tuple((lo, cap) if active[i] else (0.0, 0.0) for i in range(n))
+    x0 = np.where(active, 1.0 / na, 0.0)
 
     def neg_sharpe(w):
         ret = float(w @ mu) - rf_bar
@@ -287,9 +316,49 @@ def optimize_portfolio(
         return -(ret / vol) if vol > 0 else 0.0
 
     w = _solve_weights(neg_sharpe, n, bounds, x0)
-    return w, (cap_note(cap, n_pos) if adj else None)
+    return w, ("; ".join(notes).capitalize() if notes else None)
 
-# Integer share allocation (largest remainder, ≥1 each if feasible) 
+def cap_suboptimality_warning(
+    strategy: str, weights: np.ndarray, max_weight: Optional[float], opt_note: Optional[str]
+) -> Optional[str]:
+    """User-facing warning when a per-asset cap is actively constraining the result.
+
+    A cap only costs you something when it BINDS — i.e. an asset sits at the cap,
+    or the optimizer had to widen/relax the set to satisfy it (signalled by
+    opt_note). When the cap doesn't bind (e.g. a 90% cap on weights that are all
+    small anyway) we stay silent so the message isn't just noise. The wording is
+    strategy-specific because a cap hurts return strategies (lower return) and
+    risk strategies (higher risk / less balance) differently.
+    """
+    if max_weight is None or not (0.0 < max_weight < 1.0) or weights.size == 0:
+        return None
+    binding = (float(np.max(weights)) >= max_weight - 1e-3) or (opt_note is not None)
+    if not binding:
+        return None
+    cap = f"{max_weight:.0%}"
+    if strategy in ("max_sharpe", "max_return_target_risk"):
+        return (
+            f"Your {cap} max-weight cap is binding. It forces weight away from the "
+            f"highest-ranked holdings — and may pull in lower-ranked assets just to "
+            f"satisfy the cap — so the expected, risk-adjusted return is lower than an "
+            f"uncapped allocation would achieve. Raise the cap or add more strong tickers "
+            f"for higher modeled returns."
+        )
+    if strategy == "min_variance":
+        return (
+            f"Your {cap} max-weight cap is binding, so the portfolio can't reach the true "
+            f"minimum-variance mix — its volatility is higher than it would be without the "
+            f"cap. Raise the cap to reduce risk further."
+        )
+    if strategy == "risk_parity":
+        return (
+            f"Your {cap} max-weight cap is binding, so risk contributions can't be fully "
+            f"equalized and the result deviates from true risk parity. Raise the cap for a "
+            f"closer equal-risk allocation."
+        )
+    return None
+
+# Integer share allocation (largest remainder, ≥1 each if feasible)
 def allocate_integer_shares_largest_remainder(
     tickers: List[str],
     weights_raw: Dict[str, float],
@@ -479,6 +548,7 @@ def optimize_api():
     weights_vec, opt_note = optimize_portfolio(
         rets, interval, strategy=strategy, max_weight=max_weight, target_vol=target_vol
     )
+    cap_warning = cap_suboptimality_warning(strategy, weights_vec, max_weight, opt_note)
 
     # Build maps aligned to requested order (0 for invalid)
     weight_map_raw = {t: 0.0 for t in tickers}
@@ -510,6 +580,7 @@ def optimize_api():
         "interval": "auto" if interval in ("30m", "1d") else interval,
         "strategy": strategy,
         "note": opt_note,
+        "warning": cap_warning,
         "tickers_cleaned": tickers,
         "invalid_tickers": invalid,
         "weights": weights_display,     # for UI
