@@ -273,13 +273,42 @@ def optimize_portfolio(
 
     # ----- default: max_sharpe -----
     positive = mu > 0
-    if not np.any(positive):
-        return np.full(n, 1.0 / n), "No asset has a positive expected return; using equal weights."
     n_pos = int(positive.sum())
-    cap, adj = _effective_max_weight(n_pos, max_weight)
-    # Non-positive-mu assets pinned to 0; positive-mu assets bounded in [eps, cap].
-    bounds = tuple((eps, cap) if positive[i] else (0.0, 0.0) for i in range(n))
-    x0 = np.where(positive, 1.0 / n_pos, 0.0)
+    notes: List[str] = []
+    capped = max_weight is not None and 0.0 < max_weight < 1.0
+
+    if not capped:
+        # No cap: exclude non-positive-mu assets, floor the survivors so they
+        # can't collapse to 0. If nothing has positive expected return, there's
+        # nothing to optimize toward.
+        if n_pos == 0:
+            return np.full(n, 1.0 / n), "No asset has a positive expected return; using equal weights."
+        active = positive
+        cap, lo = 1.0, eps
+    else:
+        # A per-asset cap is a diversification constraint: to have weights sum
+        # to 100% with each <= cap, at least ceil(1/cap) assets must be held.
+        # Honor the cap by WIDENING the active set to the best-ranked assets
+        # (by expected return) rather than silently relaxing the cap. Only
+        # relax the cap when there genuinely aren't enough assets to meet it.
+        k_needed = int(np.ceil(1.0 / max_weight))
+        if n < k_needed:
+            cap = 1.0 / n  # impossible to cap below this and still total 100%
+            n_active = n
+            notes.append(f"only {n} assets, so the cap was relaxed to {cap:.0%}")
+        else:
+            cap = max_weight
+            n_active = max(n_pos, k_needed)  # widen past positive-mu assets if the cap demands it
+        order = np.argsort(mu)[::-1]                 # highest expected return first
+        active = np.zeros(n, dtype=bool)
+        active[order[:n_active]] = True
+        if n_active > n_pos and n >= k_needed:
+            notes.append(f"added {n_active - n_pos} lower-ranked asset(s) so no holding exceeds {cap:.0%}")
+        lo = 0.0  # forced-in assets may go to 0; the sum + cap constraints still apply
+
+    na = int(active.sum())
+    bounds = tuple((lo, cap) if active[i] else (0.0, 0.0) for i in range(n))
+    x0 = np.where(active, 1.0 / na, 0.0)
 
     def neg_sharpe(w):
         ret = float(w @ mu) - rf_bar
@@ -287,7 +316,7 @@ def optimize_portfolio(
         return -(ret / vol) if vol > 0 else 0.0
 
     w = _solve_weights(neg_sharpe, n, bounds, x0)
-    return w, (cap_note(cap, n_pos) if adj else None)
+    return w, ("; ".join(notes).capitalize() if notes else None)
 
 # Integer share allocation (largest remainder, ≥1 each if feasible) 
 def allocate_integer_shares_largest_remainder(
