@@ -1,427 +1,595 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>InvestEdge • Live Max-Sharpe</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/luxon@3.5.0/build/global/luxon.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
-
-  <style>
-    :root{
-      --bg-0:#060909; --bg-1:#071210; --bg-2:#071a13;
-      --green:#27e98a; --green-2:#13c676;
-      --text:#e7f1ee; --muted:#8ea6a0;
-      --border:#13201c; --ring: rgba(39,233,138,.5);
-      --radius:14px;
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>InvestEdge - Portfolio Optimizer</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@500&family=Inter:wght@400;600&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "surface-container-high": "#e6e8ea",
+          "on-secondary": "#ffffff",
+          "outline-variant": "#c6c6cd",
+          "surface-container-highest": "#e0e3e5",
+          "background": "#f7f9fb",
+          "on-surface": "#191c1e",
+          "primary-container": "#131b2e",
+          "surface": "#f7f9fb",
+          "primary": "#000000",
+          "on-background": "#191c1e",
+          "on-surface-variant": "#45464d",
+          "surface-variant": "#e0e3e5",
+          "error": "#ba1a1a",
+          "surface-container-low": "#f2f4f6",
+          "surface-container": "#eceef0",
+          "tertiary": "#000000",
+          "surface-dim": "#d8dadc",
+          "surface-container-lowest": "#ffffff",
+          "on-primary": "#ffffff",
+          "outline": "#76777d",
+          "secondary": "#006c49",
+          "surface-bright": "#f7f9fb"
+        },
+        borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+        spacing: { "sm": "16px", "margin": "32px", "gutter": "24px", "md": "24px", "base": "4px", "lg": "40px", "xl": "64px", "xs": "8px" },
+        fontFamily: {
+          "label-md": ["Inter"], "body-lg": ["Inter"],
+          "headline-lg": ["IBM Plex Sans"], "headline-md": ["IBM Plex Sans"],
+          "headline-sm": ["IBM Plex Sans"], "headline-xl": ["IBM Plex Sans"],
+          "mono-data": ["IBM Plex Mono"], "body-md": ["Inter"], "body-sm": ["Inter"]
+        },
+        fontSize: {
+          "label-md": ["14px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600" }],
+          "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+          "headline-lg": ["32px", { "lineHeight": "1.25", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+          "headline-md": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+          "headline-sm": ["20px", { "lineHeight": "1.3", "fontWeight": "700" }],
+          "headline-xl": ["48px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+          "mono-data": ["14px", { "lineHeight": "1.4", "fontWeight": "500" }],
+          "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+          "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }]
+        }
+      }
     }
-    body{
-      margin:0; color:var(--text);
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
-      min-height:100svh;
-      background:
-        radial-gradient(1000px 700px at 15% -10%, rgba(39,233,138,.12), transparent 60%),
-        radial-gradient(900px 600px at 85% -5%, rgba(39,233,138,.08), transparent 65%),
-        linear-gradient(180deg, var(--bg-0), var(--bg-1) 40%, var(--bg-2));
-      background-attachment: fixed;
-      overflow-y: overlay;
-    }
-    body::after{
-      content:""; position:fixed; inset:0; pointer-events:none;
-      background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23n)" opacity="0.03"/></svg>');
-      mix-blend-mode: soft-light;
-    }
-
-    .container{ max-width:1120px; margin:0 auto; padding:0 20px; }
-    nav{
-      position:sticky; top:0; z-index:10;
-      backdrop-filter: blur(10px);
-      background: linear-gradient(180deg, rgba(6,9,9,.85), rgba(6,9,9,.55));
-      border-bottom:1px solid var(--border);
-    }
-    .nav-inner{
-      display:flex; align-items:center; justify-content:space-between;
-      gap:16px; padding:12px 20px; max-width:1120px; margin:0 auto;
-    }
-    .brand{ display:flex; align-items:center; gap:12px; text-decoration:none; color:var(--text);}
-    .mark{
-      width:38px;height:38px;border-radius:10px; display:grid;place-items:center;
-      background: linear-gradient(135deg, rgba(39,233,138,.18), rgba(39,233,138,.05));
-      border:1px solid var(--border);
-      box-shadow: 0 10px 30px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.04);
-      font-family: "JetBrains Mono", monospace; color:var(--green); font-weight:700;
-    }
-    .links a{ color:var(--muted); text-decoration:none; padding:8px 10px; border-radius:10px; font-family:"Space Grotesk", Inter; font-weight:600; }
-    .links a:hover{ color:var(--green); background: rgba(39,233,138,.1); }
-
-    section{ padding:48px 0; }
-    .card{
-      background: rgba(255,255,255,.03);
-      border:1px solid var(--border);
-      border-radius: var(--radius);
-      padding:18px;
-      box-shadow: 0 8px 28px rgba(0,0,0,.45);
-      backdrop-filter: blur(6px);
-    }
-
-    .hero{ padding:72px 0 24px; text-align:center; }
-    .hero h1{
-      margin:0;
-      font: 800 clamp(32px,6vw,64px)/1.05 "Space Grotesk", Inter;
-      letter-spacing:.3px; color:var(--green);
-      opacity:1; transform: translateY(0); transition: opacity .4s ease, transform .4s ease;
-    }
-    .hero p{ max-width:800px; margin:14px auto 0; color:var(--muted); font-size:1.05rem; }
-    .fade-out{ opacity:0; transform: translateY(-12px); }
-
-    .grid{ display:grid; gap:12px; grid-template-columns: 1.3fr .7fr; }
-    .grid-2{ display:grid; gap:12px; grid-template-columns: 1fr 1fr; }
-    @media (max-width:860px){ .grid,.grid-2{ grid-template-columns: 1fr; } }
-
-    label{ display:block; margin:2px 0 6px 6px; color:var(--muted); font-size:.9rem; }
-    input, select, button{
-      width:100%; padding:12px 14px; border-radius:12px;
-      background:#0d1514; color:var(--text);
-      border:1px solid var(--border); outline:none;
-      transition: box-shadow .15s ease, border-color .15s ease, transform .06s ease;
-    }
-    input::placeholder{ color:#7f9690; }
-    input:focus, select:focus{ border-color: var(--green); box-shadow:0 0 0 4px var(--ring); }
-    .actions{ display:flex; gap:12px; align-items:center; margin-top:8px; }
-    .btn{
-      border:none; cursor:pointer; font-weight:700; letter-spacing:.2px;
-      color:#04140d; background: linear-gradient(180deg, var(--green), var(--green-2));
-      box-shadow: 0 12px 24px rgba(39,233,138,.20);
-    }
-    .btn:hover{ transform: translateY(-1px); }
-    .btn:active{ transform: translateY(0); box-shadow:none; }
-
-    .status{ margin-top:10px; color:var(--muted); font-size:.95rem; }
-    .tabs{ margin-top:18px; display:flex; gap:8px; flex-wrap:wrap;}
-    .tab{
-      background:#0d1514; border:1px solid var(--border); color:var(--text);
-      padding:10px 14px; border-radius:10px; cursor:pointer; user-select:none;
-      font-weight:600; font-family:"Space Grotesk", Inter;
-    }
-    .tab.active{ background: rgba(39,233,138,.12); border-color: var(--
-green); color:var(--green); }
-      .table-results {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 18px;
-  font-family: "Space Grotesk", Inter, Arial, sans-serif;
-  background: #101a19;
-  color: var(--text, #eaeaea);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 24px rgba(39,233,138,.10);
-}
-.table-results th, .table-results td {
-  padding: 12px 16px;
-  text-align: left;
-}
-.table-results th {
-  background: #16211f;
-  color: #27e98a;
-  font-weight: 600;
-  font-size: 1rem;
-}
-.table-results tr {
-  border-bottom: 1px solid var(--border, #23302e);
-}
-.table-results tr:last-child {
-  border-bottom: none;
-}
-
-    /* ── History ────────────────────────────────────────── */
-    #historySection{ margin-top:24px; }
-    .history-header{
-      display:flex; align-items:center; justify-content:space-between;
-      margin-bottom:12px;
-    }
-    .history-header h3{ margin:0; color:var(--green); font-family:"Space Grotesk",Inter; }
-    .btn-clear{
-      background:none; border:1px solid var(--border); color:var(--muted);
-      padding:6px 14px; border-radius:8px; cursor:pointer; font-size:.85rem;
-      font-family:"Space Grotesk",Inter; font-weight:600; width:auto;
-      transition: border-color .15s, color .15s;
-    }
-    .btn-clear:hover{ border-color:#e55; color:#e55; }
-    .history-empty{ color:var(--muted); font-size:.95rem; text-align:center; padding:24px 0; }
-    .history-item{
-      background: rgba(255,255,255,.025);
-      border:1px solid var(--border);
-      border-radius:10px; margin-bottom:8px; overflow:hidden;
-    }
-    .history-item-header{
-      display:flex; align-items:center; justify-content:space-between;
-      padding:12px 16px; cursor:pointer;
-      transition: background .15s;
-    }
-    .history-item-header:hover{ background: rgba(39,233,138,.06); }
-    .history-meta{ display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
-    .history-tickers{
-      font-family:"JetBrains Mono", monospace; color:var(--green);
-      font-weight:600; font-size:.95rem;
-    }
-    .history-value{ color:var(--muted); font-size:.88rem; }
-    .history-date{ color:var(--muted); font-size:.82rem; margin-left:auto; white-space:nowrap; }
-    .history-chevron{ color:var(--muted); font-size:.85rem; margin-left:12px; transition: transform .2s; }
-    .history-item.open .history-chevron{ transform: rotate(90deg); }
-    .history-body{ display:none; padding:0 16px 16px; }
-    .history-item.open .history-body{ display:block; }
-  </style>
+  }
+</script>
+<style>
+  .ambient-shadow { box-shadow: 0px 4px 20px rgba(15, 23, 42, 0.05); }
+  .donut-segment { transition: stroke-dasharray 1s ease-out, stroke-dashoffset 1s ease-out; }
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+</style>
 </head>
-<body>
-  <nav>
-    <div class="nav-inner container">
-      <a href="#" class="brand">
-        <div class="mark">IE</div>
-        <span>InvestEdge</span>
-      </a>
-      <div class="links">
-        <a href="#">Home</a>
-        <a href="#" id="calculatorTab">Calculator</a>
-        <a href="#" id="historyTab">History</a>
-        <a href="#" onclick="document.getElementById('aboutModal').style.display='flex';return false;">About</a>
-        <a href="#" onclick="document.getElementById('contactModal').style.display='flex';return false;">Contact</a>
+<body class="bg-background text-on-surface font-body-md min-h-screen flex">
+
+<!-- Sidebar -->
+<nav class="hidden lg:flex flex-col h-screen w-64 bg-surface-container-lowest border-r border-outline-variant fixed left-0 top-0 py-lg z-10">
+  <div class="px-margin mb-8">
+    <h1 class="font-headline-sm text-headline-sm font-black text-primary">InvestEdge Pro</h1>
+    <p class="font-label-md text-label-md text-on-surface-variant mt-1">Institutional Grade</p>
+  </div>
+  <div class="flex-1 flex flex-col gap-2 w-full">
+    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low" data-view="dashboard" href="#">
+      <span class="material-symbols-outlined mr-3">dashboard</span>
+      <span class="font-label-md text-label-md">Dashboard</span>
+    </a>
+    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-primary font-bold border-l-4 border-primary pl-4 bg-surface-container-low" data-view="optimizer" href="#">
+      <span class="material-symbols-outlined mr-3">tune</span>
+      <span class="font-label-md text-label-md">Optimizer</span>
+    </a>
+    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low" data-view="history" href="#">
+      <span class="material-symbols-outlined mr-3">account_balance_wallet</span>
+      <span class="font-label-md text-label-md">History</span>
+    </a>
+    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low" data-modal="aboutModal" href="#">
+      <span class="material-symbols-outlined mr-3">settings</span>
+      <span class="font-label-md text-label-md">About</span>
+    </a>
+  </div>
+  <div class="px-margin mb-8">
+    <button id="newOptimizationBtn" class="w-full bg-[#10B981] hover:bg-[#059669] text-on-primary font-label-md text-label-md py-3 rounded transition-colors flex items-center justify-center gap-2">
+      <span class="material-symbols-outlined text-sm">add</span> New Optimization
+    </button>
+  </div>
+  <div class="flex flex-col gap-2 w-full border-t border-outline-variant pt-4">
+    <a class="group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low" data-modal="contactModal" href="#">
+      <span class="material-symbols-outlined mr-3">help</span>
+      <span class="font-label-md text-label-md">Support</span>
+    </a>
+    <a class="group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low" href="#">
+      <span class="material-symbols-outlined mr-3">logout</span>
+      <span class="font-label-md text-label-md">Sign Out</span>
+    </a>
+  </div>
+</nav>
+
+<!-- Mobile top bar -->
+<header class="lg:hidden flex justify-between items-center w-full px-margin h-16 bg-surface border-b border-outline-variant fixed top-0 z-20">
+  <h1 class="font-headline-md text-headline-md font-bold text-primary">InvestEdge</h1>
+  <button id="mobileMenuBtn" class="text-primary"><span class="material-symbols-outlined">menu</span></button>
+</header>
+
+<!-- Mobile slide-out menu -->
+<div id="mobileMenu" class="lg:hidden hidden fixed inset-0 z-30">
+  <div class="absolute inset-0 bg-black/40" data-close-mobile></div>
+  <nav class="absolute left-0 top-0 h-full w-64 bg-surface-container-lowest border-r border-outline-variant py-lg flex flex-col">
+    <div class="px-margin mb-8 flex items-center justify-between">
+      <div>
+        <h1 class="font-headline-sm text-headline-sm font-black text-primary">InvestEdge Pro</h1>
+        <p class="font-label-md text-label-md text-on-surface-variant mt-1">Institutional Grade</p>
+      </div>
+      <button data-close-mobile class="text-on-surface-variant"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <a class="nav-link flex items-center py-3 px-5 text-on-surface-variant hover:bg-surface-container-low" data-view="optimizer" href="#"><span class="material-symbols-outlined mr-3">tune</span><span class="font-label-md text-label-md">Optimizer</span></a>
+    <a class="nav-link flex items-center py-3 px-5 text-on-surface-variant hover:bg-surface-container-low" data-view="history" href="#"><span class="material-symbols-outlined mr-3">account_balance_wallet</span><span class="font-label-md text-label-md">History</span></a>
+    <a class="flex items-center py-3 px-5 text-on-surface-variant hover:bg-surface-container-low" data-modal="aboutModal" href="#"><span class="material-symbols-outlined mr-3">settings</span><span class="font-label-md text-label-md">About</span></a>
+    <a class="flex items-center py-3 px-5 text-on-surface-variant hover:bg-surface-container-low" data-modal="contactModal" href="#"><span class="material-symbols-outlined mr-3">help</span><span class="font-label-md text-label-md">Support</span></a>
+  </nav>
+</div>
+
+<!-- Main workspace -->
+<main class="flex-1 lg:ml-64 pt-16 lg:pt-0 p-margin max-w-[1440px] mx-auto w-full">
+  <header class="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
+    <div>
+      <h2 class="font-headline-lg text-headline-lg text-primary">Portfolio Optimizer</h2>
+      <p class="font-body-md text-body-md text-on-surface-variant mt-2">Sharpe ratio maximization &amp; risk parity analysis.</p>
+    </div>
+    <div class="flex gap-4">
+      <button id="loadPresetBtn" class="px-4 py-2 border border-outline-variant text-on-surface-variant rounded font-label-md text-label-md hover:bg-surface-container-low transition-colors">Load Preset</button>
+      <button id="savePresetBtn" class="px-4 py-2 border border-[#2563EB] text-[#2563EB] rounded font-label-md text-label-md hover:bg-blue-50 transition-colors">Save Parameters</button>
+    </div>
+  </header>
+
+  <!-- Bento grid -->
+  <div class="grid grid-cols-1 xl:grid-cols-12 gap-gutter">
+    <!-- Input & Parameters -->
+    <div class="xl:col-span-4 bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow flex flex-col h-full">
+      <div class="p-md border-b border-outline-variant">
+        <h3 class="font-headline-md text-headline-md text-primary">Input &amp; Parameters</h3>
+      </div>
+      <div class="p-md flex-1 flex flex-col gap-6">
+        <!-- Portfolio Value -->
+        <div>
+          <label class="block font-label-md text-label-md text-on-surface mb-2" for="portfolioValue">Total Portfolio Value (USD)</label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant material-symbols-outlined text-sm">attach_money</span>
+            <input id="portfolioValue" class="w-full pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded font-mono-data text-mono-data focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all" type="text" value="1,000,000"/>
+          </div>
+        </div>
+        <!-- Tickers -->
+        <div>
+          <label class="block font-label-md text-label-md text-on-surface mb-2" for="tickerInput">Target Assets (Tickers)</label>
+          <div id="tickerChips" class="flex flex-wrap gap-2 mb-3"></div>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant material-symbols-outlined text-sm">search</span>
+            <input id="tickerInput" class="w-full pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded font-mono-data text-mono-data focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all" placeholder="Add ticker symbol..." type="text"/>
+          </div>
+        </div>
+        <!-- Strategy -->
+        <div>
+          <label class="block font-label-md text-label-md text-on-surface mb-2" for="strategy">Optimization Strategy</label>
+          <select id="strategy" class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all appearance-none cursor-pointer">
+            <option>Maximize Sharpe Ratio</option>
+            <option>Minimize Variance (Global Minimum Variance)</option>
+            <option>Risk Parity</option>
+            <option>Maximize Return for Target Risk</option>
+          </select>
+        </div>
+        <!-- Constraints -->
+        <div>
+          <label class="block font-label-md text-label-md text-on-surface mb-2">Constraints</label>
+          <div class="space-y-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input checked class="rounded border-outline-variant text-[#2563EB] focus:ring-[#2563EB]" type="checkbox"/>
+              <span class="font-body-md text-body-md">Long only (weights &gt;= 0)</span>
+            </label>
+            <div class="flex items-center gap-4">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input checked class="rounded border-outline-variant text-[#2563EB] focus:ring-[#2563EB]" type="checkbox"/>
+                <span class="font-body-md text-body-md">Max weight per asset</span>
+              </label>
+              <input class="w-20 px-2 py-1 bg-surface border border-outline-variant rounded font-mono-data text-mono-data text-right" type="text" value="30%"/>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="p-md border-t border-outline-variant bg-surface-bright mt-auto">
+        <button id="optimizeBtn" class="w-full bg-[#2563EB] hover:bg-[#1D4ED8] text-on-primary font-label-md text-label-md py-3 rounded transition-colors flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined">bolt</span> Optimize Portfolio
+        </button>
+        <p id="statusMessage" class="font-body-sm text-body-sm text-on-surface-variant mt-3 text-center"></p>
       </div>
     </div>
-  </nav>
 
-  <div class="hero container">
-    <h1 class="fade-out">Maximize Your Investments with Our Sharpe Ratio Tool</h1>
-    <p>Use our live calculator to find the best asset allocation for your portfolio.</p>
-    <div class="actions">
-      <button class="btn" id="getStartedBtn">Get Started</button>
+    <!-- Results -->
+    <div class="xl:col-span-8 flex flex-col gap-gutter h-full">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+        <!-- Donut -->
+        <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow p-md flex flex-col items-center justify-center min-h-[300px]">
+          <h4 class="font-label-md text-label-md text-on-surface mb-4 w-full text-left">Target Asset Allocation</h4>
+          <div class="relative w-48 h-48">
+            <svg id="donutChart" class="transform -rotate-90 w-full h-full" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" fill="transparent" r="40" stroke="#f1f5f9" stroke-width="20"></circle>
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+              <span id="donutCenter" class="font-headline-md text-headline-md text-primary font-bold">—</span>
+              <span class="font-body-sm text-body-sm text-on-surface-variant">Allocated</span>
+            </div>
+          </div>
+          <div id="donutLegend" class="flex flex-wrap justify-center gap-4 mt-6">
+            <span class="font-body-sm text-body-sm text-on-surface-variant">Run an optimization to see allocation.</span>
+          </div>
+        </div>
+        <!-- Metrics -->
+        <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow p-md flex flex-col justify-between">
+          <h4 class="font-label-md text-label-md text-on-surface mb-4">Optimization Metrics</h4>
+          <div class="space-y-4 flex-1">
+            <div class="flex justify-between items-end border-b border-outline-variant pb-2">
+              <span class="font-body-md text-body-md text-on-surface-variant">Expected Annual Return</span>
+              <span id="metricReturn" class="font-headline-md text-headline-md text-[#10B981]">—</span>
+            </div>
+            <div class="flex justify-between items-end border-b border-outline-variant pb-2">
+              <span class="font-body-md text-body-md text-on-surface-variant">Annual Volatility (Risk)</span>
+              <span id="metricVol" class="font-headline-md text-headline-md text-primary">—</span>
+            </div>
+            <div class="flex justify-between items-end border-b border-outline-variant pb-2">
+              <span class="font-body-md text-body-md text-on-surface-variant">Sharpe Ratio (Rf=2%)</span>
+              <span id="metricSharpe" class="font-headline-md text-headline-md text-primary">—</span>
+            </div>
+          </div>
+          <div class="mt-4 p-3 bg-blue-50 border border-[#2563EB]/20 rounded-lg flex items-start gap-3">
+            <span class="material-symbols-outlined text-[#2563EB] text-xl">insights</span>
+            <p class="font-body-sm text-body-sm text-[#1E3A8A]">This allocation maximizes risk-adjusted returns based on historical data covariance.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action plan table -->
+      <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow overflow-hidden flex-1">
+        <div class="p-md border-b border-outline-variant flex justify-between items-center bg-surface-bright">
+          <h4 class="font-label-md text-label-md text-on-surface">Action Plan &amp; Weights</h4>
+          <button id="exportCsvBtn" class="text-on-surface-variant hover:text-[#2563EB] transition-colors flex items-center gap-1">
+            <span class="material-symbols-outlined text-sm">download</span>
+            <span class="font-label-md text-label-md text-xs">Export CSV</span>
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-[#F8FAFC]">
+                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant">Ticker</th>
+                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Optimal Weight</th>
+                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Shares to Buy</th>
+                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Last Price</th>
+                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Target Value (USD)</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody">
+              <tr><td colspan="5" class="p-8 text-center font-body-sm text-body-sm text-on-surface-variant">No results yet — enter tickers and click Optimize Portfolio.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="dataMeta" class="px-4 py-3 font-body-sm text-body-sm text-on-surface-variant border-t border-outline-variant hidden"></div>
+      </div>
     </div>
   </div>
 
-  <section id="calculatorSection" style="display:none;">
-    <div class="container">
-      <div class="card">
-        <h2>Portfolio Optimizer</h2>
-        <label for="tickers">Enter Tickers (comma separated):</label>
-        <input type="text" id="tickers" placeholder="AAPL, MSFT, GOOG" />
-        <label for="portfolioValue">Portfolio Value ($):</label>
-        <input type="number" id="portfolioValue" value="100000" step="1000" />
-        <div class="actions">
-          <button class="btn" id="optimizeBtn">Optimize</button>
-        </div>
-        <div class="status" id="statusMessage"></div>
-        <div id="allocationResults"></div>
+  <!-- History -->
+  <section id="historySection" class="mt-gutter hidden">
+    <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow overflow-hidden">
+      <div class="p-md border-b border-outline-variant flex justify-between items-center bg-surface-bright">
+        <h4 class="font-label-md text-label-md text-on-surface">Optimization History</h4>
+        <button id="clearHistoryBtn" class="text-on-surface-variant hover:text-error transition-colors flex items-center gap-1">
+          <span class="material-symbols-outlined text-sm">delete</span>
+          <span class="font-label-md text-label-md text-xs">Clear History</span>
+        </button>
       </div>
+      <div id="historyList" class="p-md flex flex-col gap-3"></div>
     </div>
   </section>
+</main>
 
-  <!-- History section (shown below calculator once there's data) -->
-  <section id="historySection" style="display:none;">
-    <div class="container">
-      <div class="card">
-        <div class="history-header">
-          <h3>Optimization History</h3>
-          <button class="btn-clear" id="clearHistoryBtn">Clear History</button>
-        </div>
-        <div id="historyList"></div>
-      </div>
-    </div>
-  </section>
-
-  <div id="aboutModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(16,26,25,0.98); z-index:1000; align-items:center; justify-content:center;">
-  <div style="background:#101a19; color:#eaeaea; font-family:'Space Grotesk',Inter,Arial,sans-serif; max-width:600px; margin:auto; padding:32px 28px; border-radius:18px; box-shadow:0 8px 32px rgba(39,233,138,.12); position:relative;">
-    <button onclick="document.getElementById('aboutModal').style.display='none'" style="position:absolute;top:18px;right:18px;background:none;border:none;font-size:1.5rem;color:#27e98a;cursor:pointer;">&times;</button>
-    <h2 style="color:#27e98a; margin-bottom:18px;">About InvestEdge</h2>
-    <p style="font-size:1.08em;line-height:1.6;">
+<!-- About modal -->
+<div id="aboutModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/50 p-4">
+  <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow max-w-2xl w-full p-margin relative">
+    <button data-close-modal="aboutModal" class="absolute top-5 right-5 text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    <h2 class="font-headline-md text-headline-md text-primary mb-4">About InvestEdge</h2>
+    <p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
       InvestEdge is a research-driven portfolio tool built by three high-school students at the intersection of finance and computer science. Our platform uses a Max-Sharpe (risk-adjusted return) optimization framework—supported by back-testing and transparent data—to propose diversified portfolio weights and visualize risk/return trade-offs. Our goal is to help users make more informed investment decisions through clear, accessible analytics. InvestEdge is an educational resource and does not provide financial advice.
     </p>
   </div>
 </div>
 
-<div id="contactModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(16,26,25,0.98); z-index:1000; align-items:center; justify-content:center;">
-  <div style="background:#101a19; color:#eaeaea; font-family:'Space Grotesk',Inter,Arial,sans-serif; max-width:600px; margin:auto; padding:32px 28px; border-radius:18px; box-shadow:0 8px 32px rgba(39,233,138,.12); position:relative;">
-    <button onclick="document.getElementById('contactModal').style.display='none'" style="position:absolute;top:18px;right:18px;background:none;border:none;font-size:1.5rem;color:#27e98a;cursor:pointer;">&times;</button>
-    <h2 style="color:#27e98a; margin-bottom:8px;">Contact Us</h2>
-    <div style="color:var(--muted); margin-bottom:18px; font-size:1.08em;">
-      We would love to hear your advice! Feel free to reach out about any questions or suggestions to make InvestEdge better!
-    </div>
-    <form id="contactForm" style="display:flex;flex-direction:column;gap:14px;">
-      <input type="text" id="contactName" placeholder="Your Name" required style="font-family:'Space Grotesk',Inter,Arial,sans-serif;">
-      <input type="email" id="contactEmail" placeholder="Your Email" required style="font-family:'Space Grotesk',Inter,Arial,sans-serif;">
-      <textarea id="contactMessage" rows="5" placeholder="Your Message" required style="font-family:'Space Grotesk',Inter,Arial,sans-serif;"></textarea>
-      <button type="submit" class="btn" style="width:auto;align-self:flex-end;">Send</button>
-      <div id="contactStatus" style="margin-top:8px;font-size:0.97em;"></div>
+<!-- Contact modal -->
+<div id="contactModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/50 p-4">
+  <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow max-w-2xl w-full p-margin relative">
+    <button data-close-modal="contactModal" class="absolute top-5 right-5 text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">close</span></button>
+    <h2 class="font-headline-md text-headline-md text-primary mb-2">Contact Us</h2>
+    <p class="font-body-md text-body-md text-on-surface-variant mb-6">We would love to hear your advice! Feel free to reach out about any questions or suggestions to make InvestEdge better!</p>
+    <form id="contactForm" class="flex flex-col gap-4">
+      <input id="contactName" type="text" placeholder="Your Name" required class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
+      <input id="contactEmail" type="email" placeholder="Your Email" required class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
+      <textarea id="contactMessage" rows="5" placeholder="Your Message" required class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"></textarea>
+      <button type="submit" class="self-end px-6 bg-[#2563EB] hover:bg-[#1D4ED8] text-on-primary font-label-md text-label-md py-3 rounded transition-colors">Send</button>
+      <div id="contactStatus" class="font-body-sm text-body-sm text-on-surface-variant"></div>
     </form>
   </div>
 </div>
 
-  <script>
-    // ── History helpers ──────────────────────────────────────────────
-    const HISTORY_KEY = 'investedge_history';
-    const MAX_HISTORY = 20;
+<script>
+  // ── State ────────────────────────────────────────────────────────
+  const PALETTE = ['#2563EB','#10B981','#F59E0B','#6366F1','#EF4444','#14B8A6','#EC4899','#8B5CF6','#0EA5E9','#F97316'];
+  const CIRC = 2 * Math.PI * 40; // donut circumference for r=40
+  const HISTORY_KEY = 'investedge_history';
+  const PRESET_KEY = 'investedge_preset';
+  const MAX_HISTORY = 20;
 
-    function loadHistory() {
-      try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
-      catch { return []; }
+  let tickers = ['AAPL', 'MSFT', 'GOOGL', 'TSLA'];
+  let lastResult = null; // { data, portfolioValue }
+
+  const $ = (id) => document.getElementById(id);
+
+  // ── Ticker chips ─────────────────────────────────────────────────
+  function renderChips() {
+    $('tickerChips').innerHTML = tickers.map((t, i) => `
+      <span class="inline-flex items-center gap-1 px-3 py-1 bg-surface-container-low border border-outline-variant rounded-full font-mono-data text-mono-data text-xs">
+        ${t}
+        <button class="hover:text-error transition-colors" data-remove="${i}" aria-label="Remove ${t}">
+          <span class="material-symbols-outlined text-[14px]">close</span>
+        </button>
+      </span>`).join('');
+  }
+  $('tickerChips').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-remove]');
+    if (!btn) return;
+    tickers.splice(Number(btn.dataset.remove), 1);
+    renderChips();
+  });
+  $('tickerInput').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ',') return;
+    e.preventDefault();
+    const val = e.target.value.trim().toUpperCase().replace(/,/g, '');
+    if (val && !tickers.includes(val)) tickers.push(val);
+    e.target.value = '';
+    renderChips();
+  });
+
+  // ── Helpers ──────────────────────────────────────────────────────
+  const parseValue = (s) => Number(String(s).replace(/[^0-9.]/g, '')) || 0;
+  const fmtMoney = (n) => '$' + Math.round(n).toLocaleString();
+  const pct = (f) => (f * 100).toFixed(2) + '%';
+
+  // ── Donut ────────────────────────────────────────────────────────
+  function renderDonut(weights) {
+    const svg = $('donutChart');
+    const entries = Object.entries(weights);
+    let offset = 0;
+    let segs = `<circle cx="50" cy="50" fill="transparent" r="40" stroke="#f1f5f9" stroke-width="20"></circle>`;
+    entries.forEach(([, w], i) => {
+      const len = w * CIRC;
+      segs += `<circle class="donut-segment" cx="50" cy="50" fill="transparent" r="40"
+        stroke="${PALETTE[i % PALETTE.length]}" stroke-width="20"
+        stroke-dasharray="${len.toFixed(2)} ${CIRC.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"></circle>`;
+      offset += len;
+    });
+    svg.innerHTML = segs;
+    $('donutCenter').textContent = '100%';
+    $('donutLegend').innerHTML = entries.map(([t, w], i) => `
+      <div class="flex items-center gap-2">
+        <div class="w-3 h-3 rounded-full" style="background:${PALETTE[i % PALETTE.length]}"></div>
+        <span class="font-mono-data text-mono-data text-xs">${t} ${(w * 100).toFixed(0)}%</span>
+      </div>`).join('');
+  }
+
+  // ── Metrics (from walk-forward backtest, falling back to in-sample) ──
+  function renderMetrics(data) {
+    const bt = data.backtest_walkforward || data.backtest_in_sample || {};
+    const r = bt.cagr;          // annualized return
+    const v = bt.vol;           // annualized volatility
+    const s = bt.sharpe;        // sharpe ratio
+    $('metricReturn').textContent = r != null ? (r * 100).toFixed(1) + '%' : '—';
+    $('metricVol').textContent = v != null ? (v * 100).toFixed(1) + '%' : '—';
+    $('metricSharpe').textContent = s != null ? Number(s).toFixed(2) : '—';
+  }
+
+  // ── Results table ────────────────────────────────────────────────
+  function renderResults(data, portfolioValue) {
+    const rows = Object.keys(data.weights).map((t) => {
+      const w = data.weights[t];
+      const shares = data.share_targets?.[t] ?? '—';
+      const price = data.last_prices?.[t];
+      const target = w * portfolioValue;
+      return `<tr class="hover:bg-[#F1F5F9] transition-colors border-b border-outline-variant">
+        <td class="p-4 font-mono-data text-mono-data font-bold">${t}</td>
+        <td class="p-4 font-mono-data text-mono-data text-right text-primary font-bold">${pct(w)}</td>
+        <td class="p-4 font-mono-data text-mono-data text-right text-on-surface-variant">${shares}</td>
+        <td class="p-4 font-mono-data text-mono-data text-right text-on-surface-variant">${price != null ? '$' + Number(price).toFixed(2) : '—'}</td>
+        <td class="p-4 font-mono-data text-mono-data text-right">${fmtMoney(target)}</td>
+      </tr>`;
+    }).join('');
+    $('resultsBody').innerHTML = rows;
+    if (data.timestamp || data.interval) {
+      $('dataMeta').classList.remove('hidden');
+      $('dataMeta').innerHTML = `<span class="text-[#10B981] font-semibold">Data as of:</span> ${data.timestamp ?? '—'} &nbsp;&nbsp; <span class="text-[#10B981] font-semibold">Interval:</span> ${data.interval ?? '—'}`;
     }
+    renderDonut(data.weights);
+    renderMetrics(data);
+  }
 
-    function saveHistory(entries) {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
-    }
+  // ── History ──────────────────────────────────────────────────────
+  const loadHistory = () => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; } };
+  const saveHistory = (e) => localStorage.setItem(HISTORY_KEY, JSON.stringify(e));
 
-    function buildResultTable(data, portfolioValue) {
-      let html = `<table class="table-results">
-        <tr>
-          <th>Ticker</th><th>Weight (%)</th><th>Shares to Buy</th>
-          <th>Last Price ($)</th><th>Dollar Allocation ($)</th>
-        </tr>`;
-      for (const t in data.weights) {
-        const weight = data.weights[t];
-        const shares = data.share_targets[t];
-        const price  = data.last_prices[t];
-        const dollar = (weight * portfolioValue).toFixed(2);
-        html += `<tr>
-          <td>${t}</td>
-          <td>${(weight*100).toFixed(2)}</td>
-          <td>${shares}</td>
-          <td>$${price.toFixed(2)}</td>
-          <td>$${dollar}</td>
-        </tr>`;
-      }
-      html += `</table>
-        <div style="margin-top:10px;font-size:0.95em;color:#27e98a;">
-          <b>Data as of:</b> ${data.timestamp} &nbsp; <b>Interval:</b> ${data.interval}
-        </div>`;
-      return html;
-    }
+  function renderHistory() {
+    const entries = loadHistory();
+    const section = $('historySection');
+    if (!entries.length) { section.classList.add('hidden'); return; }
+    section.classList.remove('hidden');
+    $('historyList').innerHTML = entries.slice().reverse().map((e) => {
+      const pv = Number(e.portfolioValue).toLocaleString();
+      const tickerList = Object.keys(e.raw.weights).join(', ');
+      return `<div class="border border-outline-variant rounded-lg overflow-hidden">
+        <div class="flex items-center justify-between p-4 cursor-pointer hover:bg-surface-container-low transition-colors" data-toggle>
+          <div class="flex items-center gap-4 flex-wrap">
+            <span class="font-mono-data text-mono-data text-[#2563EB] font-semibold">${tickerList}</span>
+            <span class="font-body-sm text-body-sm text-on-surface-variant">$${pv}</span>
+          </div>
+          <span class="font-body-sm text-body-sm text-on-surface-variant whitespace-nowrap">${e.date}</span>
+        </div>
+        <div class="hidden border-t border-outline-variant" data-body>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead><tr class="bg-[#F8FAFC]">
+                <th class="p-3 font-mono-data text-[11px] uppercase text-[#0F172A]">Ticker</th>
+                <th class="p-3 font-mono-data text-[11px] uppercase text-[#0F172A] text-right">Weight</th>
+                <th class="p-3 font-mono-data text-[11px] uppercase text-[#0F172A] text-right">Target Value</th>
+              </tr></thead>
+              <tbody>${Object.keys(e.raw.weights).map((t) => `<tr class="border-b border-outline-variant last:border-0">
+                <td class="p-3 font-mono-data text-mono-data font-bold">${t}</td>
+                <td class="p-3 font-mono-data text-mono-data text-right">${pct(e.raw.weights[t])}</td>
+                <td class="p-3 font-mono-data text-mono-data text-right">${fmtMoney(e.raw.weights[t] * Number(e.portfolioValue))}</td>
+              </tr>`).join('')}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  $('historyList').addEventListener('click', (e) => {
+    const header = e.target.closest('[data-toggle]');
+    if (!header) return;
+    header.nextElementSibling.classList.toggle('hidden');
+  });
+  $('clearHistoryBtn').onclick = () => {
+    if (confirm('Clear all optimization history?')) { saveHistory([]); renderHistory(); }
+  };
 
-    function renderHistory() {
+  // ── Optimize ─────────────────────────────────────────────────────
+  $('optimizeBtn').onclick = async () => {
+    if (!tickers.length) { $('statusMessage').textContent = 'Add at least one ticker.'; return; }
+    const portfolioValue = parseValue($('portfolioValue').value);
+    $('statusMessage').textContent = 'Optimizing…';
+    try {
+      const res = await fetch('/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tickers: tickers.join(','), portfolio_value: portfolioValue })
+      });
+      if (!res.ok) throw new Error('Optimization failed');
+      const data = await res.json();
+      $('statusMessage').textContent = 'Optimization complete!';
+      lastResult = { data, portfolioValue };
+      renderResults(data, portfolioValue);
+
       const entries = loadHistory();
-      const section = document.getElementById('historySection');
-      const list    = document.getElementById('historyList');
-
-      if (entries.length === 0) {
-        section.style.display = 'none';
-        return;
-      }
-
-      section.style.display = 'block';
-      list.innerHTML = entries.slice().reverse().map((e, i) => {
-        const realIdx = entries.length - 1 - i; // index in original array for toggling
-        const pv = Number(e.portfolioValue).toLocaleString();
-        return `
-          <div class="history-item" id="hist-${realIdx}">
-            <div class="history-item-header" onclick="toggleHistory(${realIdx})">
-              <div class="history-meta">
-                <span class="history-tickers">${e.tickers}</span>
-                <span class="history-value">$${pv}</span>
-              </div>
-              <span class="history-date">${e.date}</span>
-              <span class="history-chevron">&#9654;</span>
-            </div>
-            <div class="history-body">${e.resultHtml}</div>
-          </div>`;
-      }).join('');
+      entries.push({ date: new Date().toLocaleString(), portfolioValue, raw: data });
+      if (entries.length > MAX_HISTORY) entries.splice(0, entries.length - MAX_HISTORY);
+      saveHistory(entries);
+      renderHistory();
+    } catch (err) {
+      $('statusMessage').textContent = 'Error: ' + err.message;
     }
+  };
 
-    function toggleHistory(idx) {
-      const el = document.getElementById('hist-' + idx);
-      el.classList.toggle('open');
+  // ── Export CSV ───────────────────────────────────────────────────
+  $('exportCsvBtn').onclick = () => {
+    if (!lastResult) { $('statusMessage').textContent = 'Run an optimization first.'; return; }
+    const { data, portfolioValue } = lastResult;
+    let csv = 'Ticker,Optimal Weight,Shares,Last Price,Target Value\n';
+    for (const t in data.weights) {
+      csv += [t, (data.weights[t] * 100).toFixed(2) + '%', data.share_targets?.[t] ?? '',
+        data.last_prices?.[t] ?? '', Math.round(data.weights[t] * portfolioValue)].join(',') + '\n';
     }
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = 'investedge_allocation.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
 
-    // ── Calculator show/hide ─────────────────────────────────────────
-    document.getElementById('getStartedBtn').onclick = () => {
-      document.getElementById('calculatorSection').style.display = 'block';
-      renderHistory();
-      window.scrollTo(0, document.getElementById('calculatorSection').offsetTop);
-    };
-    document.getElementById('calculatorTab').onclick = (e) => {
-      e.preventDefault();
-      document.getElementById('calculatorSection').style.display = 'block';
-      renderHistory();
-      window.scrollTo(0, document.getElementById('calculatorSection').offsetTop);
-    };
+  // ── Presets ──────────────────────────────────────────────────────
+  $('savePresetBtn').onclick = () => {
+    localStorage.setItem(PRESET_KEY, JSON.stringify({ tickers, portfolioValue: $('portfolioValue').value }));
+    $('statusMessage').textContent = 'Parameters saved.';
+  };
+  $('loadPresetBtn').onclick = () => {
+    try {
+      const p = JSON.parse(localStorage.getItem(PRESET_KEY));
+      if (!p) { $('statusMessage').textContent = 'No saved preset.'; return; }
+      tickers = p.tickers || tickers;
+      $('portfolioValue').value = p.portfolioValue || $('portfolioValue').value;
+      renderChips();
+      $('statusMessage').textContent = 'Preset loaded.';
+    } catch { $('statusMessage').textContent = 'No saved preset.'; }
+  };
 
-    // History nav tab
-    document.getElementById('historyTab').onclick = (e) => {
-      e.preventDefault();
-      document.getElementById('calculatorSection').style.display = 'block';
-      renderHistory();
-      const hs = document.getElementById('historySection');
-      if (hs.style.display !== 'none') {
-        window.scrollTo({ top: hs.offsetTop, behavior: 'smooth' });
-      } else {
-        window.scrollTo({ top: document.getElementById('calculatorSection').offsetTop, behavior: 'smooth' });
-      }
-    };
-
-    // Clear history button
-    document.getElementById('clearHistoryBtn').onclick = () => {
-      if (confirm('Clear all optimization history?')) {
-        saveHistory([]);
-        renderHistory();
-      }
-    };
-
-    // ── Optimize button ──────────────────────────────────────────────
-    document.getElementById('optimizeBtn').onclick = async () => {
-      const tickers = document.getElementById('tickers').value;
-      const portfolioValue = document.getElementById('portfolioValue').value;
-      document.getElementById('statusMessage').textContent = "Optimizing...";
-      document.getElementById('allocationResults').innerHTML = "";
-      try {
-        const res = await fetch('/optimize', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({tickers, portfolio_value: portfolioValue})
-        });
-        if (!res.ok) throw new Error("Optimization failed");
-        const data = await res.json();
-        document.getElementById('statusMessage').textContent = "Optimization complete!";
-
-        const tableHtml = buildResultTable(data, portfolioValue);
-        document.getElementById('allocationResults').innerHTML =
-          `<h3 style="margin-bottom:10px;">Suggested Allocation</h3>${tableHtml}`;
-
-        // Save to history
-        const entries = loadHistory();
-        entries.push({
-          date: new Date().toLocaleString(),
-          tickers: tickers.toUpperCase(),
-          portfolioValue,
-          resultHtml: tableHtml,
-          raw: data
-        });
-        if (entries.length > MAX_HISTORY) entries.splice(0, entries.length - MAX_HISTORY);
-        saveHistory(entries);
-        renderHistory();
-
-      } catch (err) {
-        document.getElementById('statusMessage').textContent = "Error: " + err.message;
-      }
-    };
-
-    // On page load: if history exists, show the history section immediately
-    if (loadHistory().length > 0) {
-      document.getElementById('calculatorSection').style.display = 'block';
-      renderHistory();
+  // ── Nav / modals ─────────────────────────────────────────────────
+  function scrollToHistory() {
+    renderHistory();
+    if (!$('historySection').classList.contains('hidden')) {
+      $('historySection').scrollIntoView({ behavior: 'smooth' });
     }
-
-    // Contact form handler
-    document.getElementById('contactForm').onsubmit = function(e) {
+  }
+  document.querySelectorAll('.nav-link').forEach((link) => {
+    link.addEventListener('click', (e) => {
       e.preventDefault();
-      const name = document.getElementById('contactName').value.trim();
-      const email = document.getElementById('contactEmail').value.trim();
-      const message = document.getElementById('contactMessage').value.trim();
-      const status = document.getElementById('contactStatus');
-      status.textContent = "Redirecting to your email client...";
-      window.location.href = `mailto:investedge8@gmail.com?subject=Contact from ${encodeURIComponent(name)}&body=Email: ${encodeURIComponent(email)}%0A%0A${encodeURIComponent(message)}`;
-    };
-  </script>
+      const view = link.dataset.view;
+      closeMobile();
+      if (view === 'history') scrollToHistory();
+      else window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+  $('newOptimizationBtn').onclick = () => {
+    $('resultsBody').innerHTML = '';
+    $('statusMessage').textContent = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    $('tickerInput').focus();
+  };
+
+  // Modals (open)
+  document.querySelectorAll('[data-modal]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeMobile();
+      const m = $(el.dataset.modal);
+      m.classList.remove('hidden'); m.classList.add('flex');
+    });
+  });
+  // Modals (close)
+  document.querySelectorAll('[data-close-modal]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const m = $(el.dataset.closeModal);
+      m.classList.add('hidden'); m.classList.remove('flex');
+    });
+  });
+  document.querySelectorAll('#aboutModal, #contactModal').forEach((m) => {
+    m.addEventListener('click', (e) => {
+      if (e.target === m) { m.classList.add('hidden'); m.classList.remove('flex'); }
+    });
+  });
+
+  // Mobile menu
+  const closeMobile = () => $('mobileMenu').classList.add('hidden');
+  $('mobileMenuBtn').onclick = () => $('mobileMenu').classList.remove('hidden');
+  document.querySelectorAll('[data-close-mobile]').forEach((el) => el.addEventListener('click', closeMobile));
+
+  // ── Contact form ─────────────────────────────────────────────────
+  $('contactForm').onsubmit = (e) => {
+    e.preventDefault();
+    const name = $('contactName').value.trim();
+    const email = $('contactEmail').value.trim();
+    const message = $('contactMessage').value.trim();
+    $('contactStatus').textContent = 'Redirecting to your email client…';
+    window.location.href = `mailto:investedge8@gmail.com?subject=Contact from ${encodeURIComponent(name)}&body=Email: ${encodeURIComponent(email)}%0A%0A${encodeURIComponent(message)}`;
+  };
+
+  // ── Init ─────────────────────────────────────────────────────────
+  renderChips();
+  renderHistory();
+</script>
 </body>
 </html>

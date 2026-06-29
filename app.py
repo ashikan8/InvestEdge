@@ -106,6 +106,8 @@ def fetch_spy_returns(interval: str) -> Optional[pd.Series]:
     try:
         period = "5y" if interval == "1d" else "60d"
         spy = yf.download("SPY", interval=interval, period=period, progress=False, auto_adjust=False)["Adj Close"]
+        if isinstance(spy, pd.DataFrame):  # newer yfinance returns a 1-col frame for single tickers
+            spy = spy.iloc[:, 0]
         spy = spy.ffill().dropna()
         return spy.pct_change().dropna()
     except Exception:
