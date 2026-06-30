@@ -61,8 +61,26 @@
 </script>
 <style>
   .ambient-shadow { box-shadow: 0px 4px 20px rgba(15, 23, 42, 0.05); }
-  .donut-segment { transition: stroke-dasharray 1s ease-out, stroke-dashoffset 1s ease-out; }
   .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  /* Donut: animate the initial draw, and lift a segment outward in 3D on hover
+     (triggered from either the slice itself or its legend entry). */
+  #donutChart { overflow: visible; }
+  .donut-segment {
+    transition: stroke-dasharray 1s ease-out, stroke-dashoffset 1s ease-out,
+                transform .25s cubic-bezier(.34, 1.56, .64, 1), filter .2s ease;
+    transform-box: fill-box;
+    transform-origin: center;
+    cursor: pointer;
+  }
+  .donut-segment:hover, .donut-segment.popped {
+    transform: scale(1.1);
+    filter: drop-shadow(0 10px 12px rgba(15, 23, 42, 0.5));
+  }
+  .legend-item { cursor: pointer; transition: transform .2s ease; }
+  .legend-item.active { transform: scale(1.12); }
+  .legend-item.active .legend-label { font-weight: 700; }
+  .legend-dot { transition: transform .2s ease, box-shadow .2s ease; }
+  .legend-item.active .legend-dot { transform: scale(1.35); box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08); }
 </style>
 </head>
 <body class="bg-background text-on-surface font-body-md min-h-screen flex">
@@ -224,13 +242,13 @@
         <!-- Donut -->
         <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow p-md flex flex-col items-center justify-center min-h-[300px]">
           <h4 class="font-label-md text-label-md text-on-surface mb-4 w-full text-left">Target Asset Allocation</h4>
-          <div class="relative w-48 h-48">
-            <svg id="donutChart" class="transform -rotate-90 w-full h-full" viewBox="0 0 100 100">
+          <div class="relative w-48 h-48 overflow-visible">
+            <svg id="donutChart" class="transform -rotate-90 w-full h-full overflow-visible" viewBox="0 0 100 100">
               <circle cx="50" cy="50" fill="transparent" r="40" stroke="#f1f5f9" stroke-width="20"></circle>
             </svg>
-            <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <span id="donutCenter" class="font-headline-md text-headline-md text-primary font-bold">—</span>
-              <span class="font-body-sm text-body-sm text-on-surface-variant">Allocated</span>
+              <span id="donutSubLabel" class="font-body-sm text-body-sm text-on-surface-variant">Allocated</span>
             </div>
           </div>
           <div id="donutLegend" class="flex flex-wrap justify-center gap-4 mt-6">
@@ -279,10 +297,10 @@
             <thead>
               <tr class="bg-[#F8FAFC]">
                 <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant">Ticker</th>
+                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Current Weight</th>
                 <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Optimal Weight</th>
-                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Shares to Buy</th>
-                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Last Price</th>
                 <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Target Value (USD)</th>
+                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Action</th>
               </tr>
             </thead>
             <tbody id="resultsBody">
@@ -426,6 +444,32 @@
   $('strategy').addEventListener('change', syncStrategyControls);
 
   // ── Donut ────────────────────────────────────────────────────────
+  function resetDonutCenter() {
+    $('donutCenter').textContent = '100%';
+    $('donutCenter').style.color = '';
+    $('donutSubLabel').textContent = 'Allocated';
+  }
+  // Highlight one asset across its slice (pops out in 3D), its legend row, and
+  // the center label — triggered by hovering EITHER the slice or the legend.
+  function setDonutHighlight(ticker) {
+    let matched = null;
+    $('donutChart').querySelectorAll('.donut-segment').forEach((s) => {
+      const on = s.dataset.ticker === ticker;
+      s.classList.toggle('popped', on);
+      if (on) matched = s;
+    });
+    $('donutLegend').querySelectorAll('.legend-item').forEach((l) => l.classList.toggle('active', l.dataset.ticker === ticker));
+    if (matched) {
+      $('donutCenter').textContent = matched.dataset.pct + '%';
+      $('donutCenter').style.color = matched.dataset.color;
+      $('donutSubLabel').textContent = ticker;
+    }
+  }
+  function clearDonutHighlight() {
+    $('donutChart').querySelectorAll('.donut-segment.popped').forEach((s) => s.classList.remove('popped'));
+    $('donutLegend').querySelectorAll('.legend-item.active').forEach((l) => l.classList.remove('active'));
+    resetDonutCenter();
+  }
   function renderDonut(weights) {
     const svg = $('donutChart');
     // Only chart assets with a real allocation; zero-weight (invalid/excluded)
@@ -434,20 +478,29 @@
     const entries = Object.entries(weights).filter(([, w]) => w > 0);
     let offset = 0;
     let segs = `<circle cx="50" cy="50" fill="transparent" r="40" stroke="#f1f5f9" stroke-width="20"></circle>`;
-    entries.forEach(([, w], i) => {
+    entries.forEach(([t, w], i) => {
       const len = w * CIRC;
+      const color = PALETTE[i % PALETTE.length];
       segs += `<circle class="donut-segment" cx="50" cy="50" fill="transparent" r="40"
-        stroke="${PALETTE[i % PALETTE.length]}" stroke-width="20"
-        stroke-dasharray="${len.toFixed(2)} ${CIRC.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"></circle>`;
+        stroke="${color}" stroke-width="20"
+        stroke-dasharray="${len.toFixed(2)} ${CIRC.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"
+        data-ticker="${t}" data-pct="${(w * 100).toFixed(0)}" data-color="${color}"></circle>`;
       offset += len;
     });
     svg.innerHTML = segs;
-    $('donutCenter').textContent = '100%';
     $('donutLegend').innerHTML = entries.map(([t, w], i) => `
-      <div class="flex items-center gap-2">
-        <div class="w-3 h-3 rounded-full" style="background:${PALETTE[i % PALETTE.length]}"></div>
-        <span class="font-mono-data text-mono-data text-xs">${t} ${(w * 100).toFixed(0)}%</span>
+      <div class="legend-item flex items-center gap-2" data-ticker="${t}">
+        <div class="legend-dot w-3 h-3 rounded-full" style="background:${PALETTE[i % PALETTE.length]}"></div>
+        <span class="legend-label font-mono-data text-mono-data text-xs">${t} ${(w * 100).toFixed(0)}%</span>
       </div>`).join('');
+    resetDonutCenter();
+    // Bidirectional hover: hovering a slice or its legend entry highlights both.
+    const bind = (el) => {
+      el.addEventListener('mouseenter', () => setDonutHighlight(el.dataset.ticker));
+      el.addEventListener('mouseleave', clearDonutHighlight);
+    };
+    svg.querySelectorAll('.donut-segment').forEach(bind);
+    $('donutLegend').querySelectorAll('.legend-item').forEach(bind);
   }
 
   // ── Metrics (prefer walk-forward, fall back to in-sample per-field) ──
@@ -488,17 +541,32 @@
 
   // ── Results table ────────────────────────────────────────────────
   function renderResults(data, portfolioValue) {
-    const rows = Object.keys(data.weights).map((t) => {
+    const allTickers = Object.keys(data.weights);
+    const invalid = new Set(data.invalid_tickers || []);
+    // "Current weight" is the equal-weight baseline across the valid tickers
+    // (the app doesn't track real holdings); the Action column says how to move
+    // from that baseline to the optimal weight.
+    const validCount = allTickers.filter((t) => !invalid.has(t)).length || 1;
+    const current = 1 / validCount;
+    const rows = allTickers.map((t) => {
       const w = data.weights[t];
-      const shares = data.share_targets?.[t] ?? '—';
-      const price = data.last_prices?.[t];
       const target = w * portfolioValue;
+      const isInvalid = invalid.has(t);
+      let curStr = '—', action = '—', cls = 'text-on-surface-variant', icon = '';
+      if (!isInvalid) {
+        curStr = pct(current);
+        const diff = w - current;
+        if (diff > 0.005)      { action = 'BUY';  cls = 'text-[#10B981]'; icon = 'arrow_upward'; }
+        else if (diff < -0.005) { action = 'SELL'; cls = 'text-[#EF4444]'; icon = 'arrow_downward'; }
+        else                    { action = 'HOLD'; cls = 'text-on-surface-variant'; icon = 'remove'; }
+      }
+      const iconHtml = icon ? `<span class="material-symbols-outlined text-sm">${icon}</span>` : '';
       return `<tr class="hover:bg-[#F1F5F9] transition-colors border-b border-outline-variant">
         <td class="p-4 font-mono-data text-mono-data font-bold">${t}</td>
+        <td class="p-4 font-mono-data text-mono-data text-right text-on-surface-variant">${curStr}</td>
         <td class="p-4 font-mono-data text-mono-data text-right text-primary font-bold">${pct(w)}</td>
-        <td class="p-4 font-mono-data text-mono-data text-right text-on-surface-variant">${shares}</td>
-        <td class="p-4 font-mono-data text-mono-data text-right text-on-surface-variant">${price != null ? '$' + Number(price).toFixed(2) : '—'}</td>
         <td class="p-4 font-mono-data text-mono-data text-right">${fmtMoney(target)}</td>
+        <td class="p-4 font-mono-data text-mono-data text-right ${cls}"><span class="inline-flex items-center justify-end gap-1">${iconHtml}${action}</span></td>
       </tr>`;
     }).join('');
     $('resultsBody').innerHTML = rows;
