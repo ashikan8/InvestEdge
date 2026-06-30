@@ -1,5 +1,6 @@
 import os
 import sys
+import warnings
 from typing import Dict, List, Tuple, Optional
 
 import numpy as np
@@ -206,11 +207,15 @@ def _solve_weights(objective, n: int, bounds, x0: np.ndarray, extra_constraints=
     cons = [{"type": "eq", "fun": lambda w: np.sum(w) - 1.0}]
     if extra_constraints:
         cons += extra_constraints
-    res = sco.minimize(
-        objective, x0, method="SLSQP",
-        bounds=bounds, constraints=cons,
-        options={"maxiter": 2000, "ftol": 1e-12}
-    )
+    with warnings.catch_warnings():
+        # SLSQP emits benign "Values in x were outside bounds ... clipping" chatter
+        # during line search; the final result is validated and clipped below.
+        warnings.simplefilter("ignore", RuntimeWarning)
+        res = sco.minimize(
+            objective, x0, method="SLSQP",
+            bounds=bounds, constraints=cons,
+            options={"maxiter": 2000, "ftol": 1e-12}
+        )
     w = np.array(x0, dtype=float) if ((not res.success) or np.any(np.isnan(res.x))) else np.asarray(res.x, dtype=float)
     lo = np.array([b[0] for b in bounds]); hi = np.array([b[1] for b in bounds])
     w = np.clip(w, lo, hi)
@@ -258,10 +263,22 @@ def optimize_portfolio(
         bounds = tuple((eps, cap) for _ in range(n))  # floor keeps every risk contribution defined
 
         def rp_obj(w):
-            contrib = w * (Sigma @ w)           # each asset's contribution to portfolio variance
-            return float(np.sum((contrib - contrib.mean()) ** 2))  # 0 when all contributions are equal
+            port_var = float(w @ Sigma @ w)
+            if port_var <= 0:
+                return 0.0
+            # FRACTIONAL risk contributions (sum to 1). Normalizing by total
+            # variance keeps the objective O(1) instead of O(1e-10) for daily
+            # data, so SLSQP doesn't stop at its tolerance far from the solution.
+            rc = (w * (Sigma @ w)) / port_var
+            return float(np.sum((rc - 1.0 / n) ** 2))  # 0 when every asset contributes 1/n of the risk
 
-        w = _solve_weights(rp_obj, n, bounds, np.full(n, 1.0 / n))
+        # Warm-start from inverse-volatility weights — the exact equal-risk
+        # solution when correlations are equal, and a strong start otherwise.
+        inv_vol = 1.0 / np.sqrt(np.clip(np.diag(Sigma), 1e-12, None))
+        x0 = np.clip(inv_vol / inv_vol.sum(), eps, cap)
+        x0 = x0 / x0.sum()
+
+        w = _solve_weights(rp_obj, n, bounds, x0)
         return w, (cap_note(cap, n) if adj else None)
 
     # ----- strategies that depend on expected returns (mu) -----
@@ -271,15 +288,26 @@ def optimize_portfolio(
         cap, adj = _effective_max_weight(n, max_weight)
         bounds = tuple((0.0, cap) for _ in range(n))
         tv = target_vol if (target_vol and target_vol > 0) else DEFAULT_TARGET_VOL
-        target_var_bar = (tv ** 2) / bpyr      # convert annualized vol target to per-bar variance
-        cons = [{"type": "ineq", "fun": lambda w: target_var_bar - float(w @ Sigma @ w)}]
-        w = _solve_weights(lambda w: -float(w @ mu), n, bounds, np.full(n, 1.0 / n), extra_constraints=cons)
-        realized_vol = float(np.sqrt(max(0.0, w @ Sigma @ w)) * np.sqrt(bpyr))
         notes = []
         if adj:
             notes.append(f"max-weight cap raised to {cap:.0%} for feasibility")
-        if realized_vol > tv + 1e-4:
-            notes.append(f"target volatility {tv:.0%} not reachable; closest is {realized_vol:.0%}")
+
+        # The lowest risk any long-only mix of these assets can reach is the
+        # global minimum-variance portfolio. If the target is below that, NO
+        # allocation can hit it, so return the minimum-risk portfolio (the
+        # closest feasible point) instead of an arbitrary equal-weight fallback.
+        w_minvar = _solve_weights(lambda w: float(w @ Sigma @ w), n, bounds, np.full(n, 1.0 / n))
+        vol_min = float(np.sqrt(max(0.0, w_minvar @ Sigma @ w_minvar)) * np.sqrt(bpyr))
+        if tv < vol_min - 1e-4:
+            notes.append("target volatility is below the minimum achievable; showing the lowest-risk portfolio")
+            return w_minvar, ("; ".join(notes).capitalize() if notes else None)
+
+        # Feasible target: maximize expected return subject to vol <= target.
+        # Start from the (feasible) min-variance portfolio so SLSQP stays inside
+        # both the cap and the volatility constraint.
+        target_var_bar = (tv ** 2) / bpyr
+        cons = [{"type": "ineq", "fun": lambda w: target_var_bar - float(w @ Sigma @ w)}]
+        w = _solve_weights(lambda w: -float(w @ mu), n, bounds, w_minvar, extra_constraints=cons)
         return w, ("; ".join(notes).capitalize() if notes else None)
 
     # ----- default: max_sharpe -----
@@ -511,7 +539,7 @@ def optimize_api():
     weights_vec, opt_note = optimize_portfolio(
         rets, strategy=strategy, max_weight=max_weight, target_vol=target_vol
     )
-    cap_warning = cap_suboptimality_warning(strategy, weights_vec, max_weight, opt_note)
+    warning = cap_suboptimality_warning(strategy, weights_vec, max_weight, opt_note)
 
     # Build maps aligned to requested order (0 for invalid)
     weight_map_raw = {t: 0.0 for t in tickers}
@@ -538,12 +566,25 @@ def optimize_api():
         prices_df, strategy=strategy, max_weight=max_weight, target_vol=target_vol
     )
 
+    # Prominently warn if the target-risk strategy couldn't meet the requested
+    # volatility. Use the SAME vol number shown in the metrics card (realized
+    # backtest vol) so the warning can never contradict the displayed figure.
+    shown_vol = walkforward_bt.get("vol")
+    if shown_vol is None:
+        shown_vol = in_sample_bt.get("vol")
+    if strategy == "max_return_target_risk" and target_vol and shown_vol and shown_vol > target_vol * 1.15:
+        warning = (
+            f"Target volatility {target_vol:.0%} can't be met with these assets — the lowest risk "
+            f"they allow is about {shown_vol * 100:.0f}% (shown at left). Add lower-volatility assets "
+            f"or raise the target; the minimum-risk portfolio is shown."
+        )
+
     response = {
         "timestamp": str(prices_df.index[-1]),
         "interval": "daily",
         "strategy": strategy,
         "note": opt_note,
-        "warning": cap_warning,
+        "warning": warning,
         "tickers_cleaned": tickers,
         "invalid_tickers": invalid,
         "weights": weights_display,     # for UI
