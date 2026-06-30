@@ -1,20 +1,30 @@
 import os
 import sys
+import json
+import sqlite3
 import warnings
+from datetime import datetime, timezone
 from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 import pandas as pd
 import scipy.optimize as sco
 import yfinance as yf
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, session, redirect, url_for
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
 
 try:
     from sklearn.covariance import LedoitWolf
     _HAS_SKLEARN = True
 except Exception:
     _HAS_SKLEARN = False
+
+try:
+    from authlib.integrations.flask_client import OAuth
+    _HAS_AUTHLIB = True
+except Exception:
+    _HAS_AUTHLIB = False
 
 EW_HALFLIFE = 63           # trading days (~3 months) for the recency-weighted mean
 BLEND_ALPHA = 0.60         # mu = 60% asset EW mean + 40% beta-adjusted (CAPM) market prior
@@ -26,6 +36,86 @@ STRATEGIES = ("max_sharpe", "min_variance", "risk_parity", "max_return_target_ri
 # Flask
 app = Flask(__name__, static_folder=".", static_url_path="")
 CORS(app)
+
+# Sessions: signed-cookie login state. SECRET_KEY MUST be set in production
+# (a stable random value); the dev default only keeps local runs working.
+app.secret_key = os.environ.get("SECRET_KEY", "dev-only-insecure-secret-change-me")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "false").strip().lower() in ("1", "true", "yes"),
+)
+
+# ───────────────────────── Accounts / auth / history ─────────────────────────
+# SQLite is used so there are no extra services to run. On an ephemeral host
+# (e.g. Railway) point DATABASE_PATH at a mounted volume so accounts + history
+# survive redeploys; locally it defaults to a file in the project directory.
+DATABASE_PATH = os.environ.get("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "investedge.db"))
+MAX_SERVER_HISTORY = 100  # newest N optimizations kept per account
+
+def get_db() -> sqlite3.Connection:
+    """A fresh connection per use (safe across gunicorn threads); callers use `with`."""
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+def init_db() -> None:
+    with get_db() as conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                email         TEXT UNIQUE NOT NULL,
+                password_hash TEXT,            -- NULL for Google-only accounts
+                google_sub    TEXT UNIQUE,     -- Google's stable user id, NULL for password accounts
+                display_name  TEXT,
+                created_at    TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS history (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                payload    TEXT NOT NULL,       -- JSON: one optimization result
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_history_user ON history(user_id, id DESC);
+            """
+        )
+
+init_db()
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+def current_user() -> Optional[Dict]:
+    """The logged-in user (from the session cookie), or None for guests."""
+    uid = session.get("user_id")
+    if not uid:
+        return None
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, email, display_name FROM users WHERE id = ?", (uid,)
+        ).fetchone()
+    return dict(row) if row else None
+
+# Google OAuth — only active when credentials are configured. Without them the
+# rest of auth (email/password) still works and the UI hides the Google button.
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+oauth = OAuth(app) if _HAS_AUTHLIB else None
+
+def google_enabled() -> bool:
+    return bool(oauth and GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+
+if google_enabled():
+    oauth.register(
+        name="google",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
 
 # Ticker normalization / common fixes 
 TICKER_FIXES = {
@@ -489,10 +579,150 @@ def backtest_walkforward(
     stats = _backtest_stats(port, bpyr)
     return {**stats, "rebalances": rebalance_count, "out_of_sample_bars": int(len(port))}
 
-# Routes 
+# Routes
 @app.route("/")
 def index():
     return send_from_directory(".", "index.html")
+
+# ───────────────────────────── Auth routes ──────────────────────────────────
+def _public_user(user: Dict) -> Dict:
+    return {"id": user["id"], "email": user["email"], "name": user.get("display_name") or user["email"]}
+
+@app.route("/auth/me")
+def auth_me():
+    """Current login state + whether Google sign-in is available (controls the UI)."""
+    user = current_user()
+    return jsonify({"user": _public_user(user) if user else None, "google_enabled": google_enabled()})
+
+@app.route("/auth/register", methods=["POST"])
+def auth_register():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    name = (data.get("name") or "").strip() or (email.split("@")[0] if "@" in email else email)
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return jsonify({"error": "Please enter a valid email address."}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters."}), 400
+    with get_db() as conn:
+        if conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
+            return jsonify({"error": "An account with that email already exists."}), 409
+        cur = conn.execute(
+            "INSERT INTO users (email, password_hash, display_name, created_at) VALUES (?, ?, ?, ?)",
+            (email, generate_password_hash(password), name, _now_iso()),
+        )
+        uid = cur.lastrowid
+    session.clear()
+    session["user_id"] = uid
+    return jsonify({"user": {"id": uid, "email": email, "name": name}})
+
+@app.route("/auth/login", methods=["POST"])
+def auth_login():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    # Use the same generic message whether the email is unknown or the password
+    # is wrong, so the endpoint doesn't reveal which emails are registered.
+    if not row or not row["password_hash"] or not check_password_hash(row["password_hash"], password):
+        return jsonify({"error": "Incorrect email or password."}), 401
+    session.clear()
+    session["user_id"] = row["id"]
+    return jsonify({"user": _public_user(dict(row))})
+
+@app.route("/auth/logout", methods=["POST"])
+def auth_logout():
+    session.clear()
+    return jsonify({"ok": True})
+
+@app.route("/auth/google/login")
+def auth_google_login():
+    if not google_enabled():
+        return jsonify({"error": "Google sign-in is not configured."}), 404
+    return oauth.google.authorize_redirect(url_for("auth_google_callback", _external=True))
+
+@app.route("/auth/google/callback")
+def auth_google_callback():
+    if not google_enabled():
+        return redirect("/")
+    try:
+        token = oauth.google.authorize_access_token()
+        info = token.get("userinfo") or oauth.google.userinfo()
+    except Exception as e:
+        print(f"[google_callback] {e}", file=sys.stderr)
+        return redirect("/?auth_error=google")
+    sub = info.get("sub")
+    email = (info.get("email") or "").strip().lower()
+    name = info.get("name") or (email.split("@")[0] if email else "User")
+    if not sub:
+        return redirect("/?auth_error=google")
+    with get_db() as conn:
+        # Match by Google id first, then by email (links an existing password
+        # account to Google), otherwise create a new Google-only account.
+        row = conn.execute("SELECT * FROM users WHERE google_sub = ?", (sub,)).fetchone()
+        if row is None and email:
+            row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        if row is None:
+            cur = conn.execute(
+                "INSERT INTO users (email, google_sub, display_name, created_at) VALUES (?, ?, ?, ?)",
+                (email or f"google_{sub}@users.noreply", sub, name, _now_iso()),
+            )
+            uid = cur.lastrowid
+        else:
+            uid = row["id"]
+            if row["google_sub"] is None:  # link Google to the existing account
+                conn.execute("UPDATE users SET google_sub = ? WHERE id = ?", (sub, uid))
+    session.clear()
+    session["user_id"] = uid
+    return redirect("/")
+
+# ──────────────────────────── History routes ────────────────────────────────
+@app.route("/history", methods=["GET"])
+def history_list():
+    """Logged-in user's saved optimizations (newest first). Guests get an empty
+    list and keep their history client-side in localStorage."""
+    user = current_user()
+    if not user:
+        return jsonify({"history": [], "guest": True})
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, created_at, payload FROM history WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+            (user["id"], MAX_SERVER_HISTORY),
+        ).fetchall()
+    history = [{"id": r["id"], "created_at": r["created_at"], **json.loads(r["payload"])} for r in rows]
+    return jsonify({"history": history, "guest": False})
+
+@app.route("/history", methods=["POST"])
+def history_add():
+    user = current_user()
+    if not user:
+        return jsonify({"error": "Sign in to save history to your account."}), 401
+    data = request.get_json(silent=True) or {}
+    entry = data.get("entry")
+    if not isinstance(entry, dict):
+        return jsonify({"error": "entry must be a JSON object."}), 400
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO history (user_id, created_at, payload) VALUES (?, ?, ?)",
+            (user["id"], _now_iso(), json.dumps(entry)),
+        )
+        # Trim to the newest MAX_SERVER_HISTORY rows for this user.
+        conn.execute(
+            """DELETE FROM history WHERE user_id = ? AND id NOT IN
+               (SELECT id FROM history WHERE user_id = ? ORDER BY id DESC LIMIT ?)""",
+            (user["id"], user["id"], MAX_SERVER_HISTORY),
+        )
+    return jsonify({"ok": True})
+
+@app.route("/history", methods=["DELETE"])
+def history_clear():
+    user = current_user()
+    if not user:
+        return jsonify({"error": "Not signed in."}), 401
+    with get_db() as conn:
+        conn.execute("DELETE FROM history WHERE user_id = ?", (user["id"],))
+    return jsonify({"ok": True})
 
 @app.route("/optimize", methods=["POST"])
 def optimize_api():

@@ -338,17 +338,34 @@
   </div>
 </div>
 
-<!-- Login modal (local demo profile — stored only in this browser, no server account) -->
+<!-- Login / register modal -->
 <div id="loginModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/50 p-4">
   <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow max-w-md w-full p-margin relative">
     <button data-close-modal="loginModal" class="absolute top-5 right-5 text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">close</span></button>
-    <h2 class="font-headline-md text-headline-md text-primary mb-1">Sign In</h2>
-    <p class="font-body-sm text-body-sm text-on-surface-variant mb-6">Demo sign-in — your profile is saved only in this browser. No password or server account required.</p>
+    <h2 id="loginTitle" class="font-headline-md text-headline-md text-primary mb-1">Sign In</h2>
+    <p id="loginSubtitle" class="font-body-sm text-body-sm text-on-surface-variant mb-6">Sign in to save your optimization history to your account and access it from anywhere.</p>
+
+    <button id="googleBtn" type="button" class="hidden w-full flex items-center justify-center gap-3 px-4 py-2.5 border border-outline-variant rounded font-label-md text-label-md hover:bg-surface-container-low transition-colors mb-4">
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95L3.97 7.3C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
+      Continue with Google
+    </button>
+    <div id="googleDivider" class="hidden flex items-center gap-3 mb-4">
+      <div class="flex-1 h-px bg-outline-variant"></div>
+      <span class="font-body-sm text-body-sm text-on-surface-variant">or</span>
+      <div class="flex-1 h-px bg-outline-variant"></div>
+    </div>
+
     <form id="loginForm" class="flex flex-col gap-4">
-      <input id="loginName" type="text" placeholder="Display Name" required class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
-      <input id="loginEmail" type="email" placeholder="Email" required class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
-      <button type="submit" class="self-end px-6 bg-[#2563EB] hover:bg-[#1D4ED8] text-on-primary font-label-md text-label-md py-3 rounded transition-colors">Sign In</button>
+      <input id="loginName" type="text" placeholder="Display Name" autocomplete="name" class="hidden w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
+      <input id="loginEmail" type="email" placeholder="Email" required autocomplete="email" class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
+      <input id="loginPassword" type="password" placeholder="Password (min 8 characters)" required minlength="8" autocomplete="current-password" class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
+      <p id="loginError" class="hidden font-body-sm text-body-sm text-error"></p>
+      <button id="loginSubmit" type="submit" class="px-6 bg-[#2563EB] hover:bg-[#1D4ED8] text-on-primary font-label-md text-label-md py-3 rounded transition-colors">Sign In</button>
     </form>
+    <p class="font-body-sm text-body-sm text-on-surface-variant text-center mt-4">
+      <span id="loginToggleText">Don't have an account?</span>
+      <button id="loginToggle" type="button" class="text-[#2563EB] font-semibold hover:underline ml-1">Create one</button>
+    </p>
   </div>
 </div>
 
@@ -493,19 +510,49 @@
     renderMetrics(data);
   }
 
-  // ── History ──────────────────────────────────────────────────────
-  const loadHistory = () => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; } };
-  const saveHistory = (e) => localStorage.setItem(HISTORY_KEY, JSON.stringify(e));
+  // ── History (server when signed in, localStorage when a guest) ───────
+  let historyCache = [];   // always newest-first
+  const loadLocalHistory = () => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; } };
+  const saveLocalHistory = (e) => localStorage.setItem(HISTORY_KEY, JSON.stringify(e));
+
+  // Pull the right history source into historyCache, then render.
+  async function refreshHistory() {
+    if (authState.user) {
+      try {
+        const r = await fetch('/history');
+        const d = await r.json();
+        historyCache = d.history || [];           // server returns newest-first
+      } catch { historyCache = []; }
+    } else {
+      historyCache = loadLocalHistory().slice().reverse();  // local is appended oldest-first
+    }
+    renderHistory();
+  }
+
+  // Save one optimization to wherever the user's history lives.
+  async function saveOptimization(entry) {
+    if (authState.user) {
+      try {
+        await fetch('/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) });
+      } catch { /* ignore network hiccup; metrics still shown */ }
+    } else {
+      const local = loadLocalHistory();
+      local.push(entry);
+      if (local.length > MAX_HISTORY) local.splice(0, local.length - MAX_HISTORY);
+      saveLocalHistory(local);
+    }
+    await refreshHistory();
+  }
 
   function renderHistory() {
-    // Drop any malformed or old-schema entries so one bad localStorage record
-    // can't throw and blank out the whole history view.
-    const entries = loadHistory().filter((e) => e && e.raw && e.raw.weights);
+    // Drop any malformed or old-schema entries so one bad record can't throw
+    // and blank out the whole history view.
+    const entries = (historyCache || []).filter((e) => e && e.raw && e.raw.weights);
     if (!entries.length) {
       $('historyList').innerHTML = '<p class="font-body-sm text-body-sm text-on-surface-variant text-center py-6">No optimizations yet — run one from the Optimizer and it will show up here.</p>';
       return;
     }
-    $('historyList').innerHTML = entries.slice().reverse().map((e) => {
+    $('historyList').innerHTML = entries.map((e) => {
       const pv = Number(e.portfolioValue).toLocaleString();
       const tickerList = Object.keys(e.raw.weights).join(', ');
       return `<div class="border border-outline-variant rounded-lg overflow-hidden">
@@ -540,8 +587,14 @@
     if (!header) return;
     header.nextElementSibling.classList.toggle('hidden');
   });
-  $('clearHistoryBtn').onclick = () => {
-    if (confirm('Clear all optimization history?')) { saveHistory([]); renderHistory(); }
+  $('clearHistoryBtn').onclick = async () => {
+    if (!confirm('Clear all optimization history?')) return;
+    if (authState.user) {
+      try { await fetch('/history', { method: 'DELETE' }); } catch { /* ignore */ }
+    } else {
+      saveLocalHistory([]);
+    }
+    await refreshHistory();
   };
 
   // ── Optimize ─────────────────────────────────────────────────────
@@ -575,11 +628,7 @@
       lastResult = { data, portfolioValue };
       renderResults(data, portfolioValue);
 
-      const entries = loadHistory();
-      entries.push({ date: new Date().toLocaleString(), portfolioValue, raw: data });
-      if (entries.length > MAX_HISTORY) entries.splice(0, entries.length - MAX_HISTORY);
-      saveHistory(entries);
-      renderHistory();
+      await saveOptimization({ date: new Date().toLocaleString(), portfolioValue, raw: data });
     } catch (err) {
       $('statusMessage').textContent = 'Error: ' + err.message;
     }
@@ -630,7 +679,7 @@
   }
   function showView(view) {
     const isHistory = view === 'history';
-    if (isHistory) renderHistory();
+    if (isHistory) refreshHistory();
     $('dashboardView').classList.toggle('hidden', isHistory);
     $('historySection').classList.toggle('hidden', !isHistory);
     setNavActive(view);
@@ -679,39 +728,82 @@
   $('mobileMenuBtn').onclick = () => $('mobileMenu').classList.remove('hidden');
   document.querySelectorAll('[data-close-mobile]').forEach((el) => el.addEventListener('click', closeMobile));
 
-  // ── Auth (local demo profile, no server) ─────────────────────────
-  const USER_KEY = 'investedge_user';
-  const loadUser = () => { try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; } };
+  // ── Auth (real accounts: session cookie + server history) ────────
+  let authState = { user: null, googleEnabled: false };
+  let loginMode = 'signin';   // or 'register'
+
+  async function refreshAuth() {
+    try {
+      const r = await fetch('/auth/me');
+      const d = await r.json();
+      authState = { user: d.user || null, googleEnabled: !!d.google_enabled };
+    } catch { authState = { user: null, googleEnabled: false }; }
+    renderAuth();
+  }
   function renderAuth() {
-    const user = loadUser();
-    const signedIn = !!(user && user.name);
+    const signedIn = !!authState.user;
     $('authLabel').textContent = signedIn ? 'Sign Out' : 'Sign In';
     $('authIcon').textContent = signedIn ? 'logout' : 'login';
     $('userBadge').classList.toggle('hidden', !signedIn);
     if (signedIn) {
-      $('userBadgeName').textContent = user.name;
-      $('userBadgeEmail').textContent = user.email || '';
+      $('userBadgeName').textContent = authState.user.name;
+      $('userBadgeEmail').textContent = authState.user.email || '';
     }
   }
-  $('authBtn').onclick = () => {
-    if (loadUser()?.name) {                 // signed in → sign out
-      localStorage.removeItem(USER_KEY);
-      renderAuth();
-      $('statusMessage').textContent = 'Signed out.';
-    } else {                                // signed out → open login modal
-      const m = $('loginModal'); m.classList.remove('hidden'); m.classList.add('flex');
+
+  function setLoginMode(mode) {
+    loginMode = mode;
+    const reg = mode === 'register';
+    $('loginTitle').textContent = reg ? 'Create Account' : 'Sign In';
+    $('loginSubmit').textContent = reg ? 'Create Account' : 'Sign In';
+    $('loginName').classList.toggle('hidden', !reg);
+    $('loginPassword').setAttribute('autocomplete', reg ? 'new-password' : 'current-password');
+    $('loginToggleText').textContent = reg ? 'Already have an account?' : "Don't have an account?";
+    $('loginToggle').textContent = reg ? 'Sign in' : 'Create one';
+    $('loginError').classList.add('hidden');
+  }
+  function openLogin() {
+    setLoginMode('signin');
+    $('loginForm').reset();
+    $('googleBtn').classList.toggle('hidden', !authState.googleEnabled);
+    $('googleDivider').classList.toggle('hidden', !authState.googleEnabled);
+    const m = $('loginModal'); m.classList.remove('hidden'); m.classList.add('flex');
+  }
+  $('loginToggle').onclick = () => setLoginMode(loginMode === 'signin' ? 'register' : 'signin');
+  $('googleBtn').onclick = () => { window.location.href = '/auth/google/login'; };
+
+  $('authBtn').onclick = async () => {
+    if (authState.user) {                       // signed in → sign out (guest history is local)
+      try { await fetch('/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
+      await refreshAuth();
+      await refreshHistory();
+      $('statusMessage').textContent = 'Signed out — you can sign back in anytime to see your saved history.';
+    } else {
+      openLogin();
     }
   };
-  $('loginForm').onsubmit = (e) => {
+
+  $('loginForm').onsubmit = async (e) => {
     e.preventDefault();
-    const name = $('loginName').value.trim();
     const email = $('loginEmail').value.trim();
-    if (!name || !email) return;
-    localStorage.setItem(USER_KEY, JSON.stringify({ name, email }));
-    const m = $('loginModal'); m.classList.add('hidden'); m.classList.remove('flex');
-    $('loginForm').reset();
-    renderAuth();
-    $('statusMessage').textContent = 'Signed in as ' + name + '.';
+    const password = $('loginPassword').value;
+    const name = $('loginName').value.trim();
+    const url = loginMode === 'register' ? '/auth/register' : '/auth/login';
+    const body = loginMode === 'register' ? { email, password, name } : { email, password };
+    const errEl = $('loginError');
+    errEl.classList.add('hidden');
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const d = await r.json();
+      if (!r.ok) { errEl.textContent = d.error || 'Something went wrong.'; errEl.classList.remove('hidden'); return; }
+      const m = $('loginModal'); m.classList.add('hidden'); m.classList.remove('flex');
+      await refreshAuth();
+      await refreshHistory();
+      $('statusMessage').textContent = 'Signed in as ' + (d.user.name || d.user.email) + '.';
+    } catch {
+      errEl.textContent = 'Network error — please try again.';
+      errEl.classList.remove('hidden');
+    }
   };
 
   // ── Contact form ─────────────────────────────────────────────────
@@ -725,10 +817,17 @@
   };
 
   // ── Init ─────────────────────────────────────────────────────────
-  renderChips();
-  syncStrategyControls();
-  renderAuth();
-  showView('optimizer');
+  (async () => {
+    renderChips();
+    syncStrategyControls();
+    showView('optimizer');
+    if (new URLSearchParams(location.search).get('auth_error') === 'google') {
+      $('statusMessage').textContent = 'Google sign-in failed or was cancelled. Please try again.';
+      history.replaceState({}, '', location.pathname);  // drop the ?auth_error from the URL
+    }
+    await refreshAuth();     // determine logged-in state (+ whether Google is enabled)
+    await refreshHistory();  // load server or guest history accordingly
+  })();
 </script>
 </body>
 </html>
