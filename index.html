@@ -3,397 +3,487 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>InvestEdge - Portfolio Optimizer</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@500&family=Inter:wght@400;600&display=swap" rel="stylesheet"/>
-<script id="tailwind-config">
-  tailwind.config = {
-    darkMode: "class",
-    theme: {
-      extend: {
-        colors: {
-          "surface-container-high": "#e6e8ea",
-          "on-secondary": "#ffffff",
-          "outline-variant": "#c6c6cd",
-          "surface-container-highest": "#e0e3e5",
-          "background": "#f7f9fb",
-          "on-surface": "#191c1e",
-          "primary-container": "#131b2e",
-          "surface": "#f7f9fb",
-          "primary": "#000000",
-          "on-background": "#191c1e",
-          "on-surface-variant": "#45464d",
-          "surface-variant": "#e0e3e5",
-          "error": "#ba1a1a",
-          "surface-container-low": "#f2f4f6",
-          "surface-container": "#eceef0",
-          "tertiary": "#000000",
-          "surface-dim": "#d8dadc",
-          "surface-container-lowest": "#ffffff",
-          "on-primary": "#ffffff",
-          "outline": "#76777d",
-          "secondary": "#006c49",
-          "surface-bright": "#f7f9fb"
-        },
-        borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
-        spacing: { "sm": "16px", "margin": "32px", "gutter": "24px", "md": "24px", "base": "4px", "lg": "40px", "xl": "64px", "xs": "8px" },
-        fontFamily: {
-          "label-md": ["Inter"], "body-lg": ["Inter"],
-          "headline-lg": ["IBM Plex Sans"], "headline-md": ["IBM Plex Sans"],
-          "headline-sm": ["IBM Plex Sans"], "headline-xl": ["IBM Plex Sans"],
-          "mono-data": ["IBM Plex Mono"], "body-md": ["Inter"], "body-sm": ["Inter"]
-        },
-        fontSize: {
-          "label-md": ["14px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600" }],
-          "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
-          "headline-lg": ["32px", { "lineHeight": "1.25", "letterSpacing": "-0.01em", "fontWeight": "600" }],
-          "headline-md": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
-          "headline-sm": ["20px", { "lineHeight": "1.3", "fontWeight": "700" }],
-          "headline-xl": ["48px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600" }],
-          "mono-data": ["14px", { "lineHeight": "1.4", "fontWeight": "500" }],
-          "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
-          "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }]
-        }
-      }
-    }
-  }
-</script>
+<title>InvestEdge Pro - Portfolio Optimizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet">
 <style>
-  .ambient-shadow { box-shadow: 0px 4px 20px rgba(15, 23, 42, 0.05); }
-  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
-  /* Donut: animate the initial draw, and lift a segment outward in 3D on hover
-     (triggered from either the slice itself or its legend entry). */
-  #donutChart { overflow: visible; }
-  .donut-segment {
-    transition: stroke-dasharray 1s ease-out, stroke-dashoffset 1s ease-out,
-                transform .25s cubic-bezier(.34, 1.56, .64, 1), filter .2s ease;
-    transform-box: fill-box;
-    transform-origin: center;
-    cursor: pointer;
+  :root{
+    /* Sky accent variant */
+    --acc:#38BDF8; --acc-d:#0EA5E9; --acc-on:#04121E;
+    --acc-glow:rgba(56,189,248,0.16); --acc-glow-strong:rgba(56,189,248,0.5);
+    --acc-border:rgba(56,189,248,0.30); --acc-tint:rgba(56,189,248,0.10); --acc-tint-hover:rgba(56,189,248,0.18);
   }
-  .donut-segment:hover, .donut-segment.popped {
-    transform: scale(1.1);
-    filter: drop-shadow(0 10px 12px rgba(15, 23, 42, 0.5));
-  }
-  .legend-item { cursor: pointer; transition: transform .2s ease; }
-  .legend-item.active { transform: scale(1.12); }
-  .legend-item.active .legend-label { font-weight: 700; }
-  .legend-dot { transition: transform .2s ease, box-shadow .2s ease; }
-  .legend-item.active .legend-dot { transform: scale(1.35); box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08); }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:#080B10;}
+  body{font-family:'IBM Plex Sans',sans-serif;color:#EDF1F5;min-height:100vh;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .hidden{display:none!important;}
+  .material-symbols-outlined{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';font-feature-settings:'liga';-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;}
+  input::placeholder,textarea::placeholder{color:#5B6472;}
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.10);border-radius:6px;}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.18);}
+  ::-webkit-scrollbar-track{background:transparent;}
+  select option{background:#12171F;color:#EDF1F5;}
+  input[type=checkbox]{accent-color:#35E0A1;width:16px;height:16px;}
+  @keyframes glowDrift{0%,100%{transform:translate(0,0) scale(1);}50%{transform:translate(40px,26px) scale(1.12);}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* Layout */
+  .app{position:relative;display:flex;min-height:100vh;width:100%;overflow-x:hidden;}
+  .amb{position:fixed;inset:0;pointer-events:none;z-index:0;}
+  .amb .b1{position:absolute;top:-12%;left:-6%;width:640px;height:640px;border-radius:50%;background:radial-gradient(circle,var(--acc-glow),transparent 62%);filter:blur(24px);animation:glowDrift 16s ease-in-out infinite;}
+  .amb .b2{position:absolute;bottom:-16%;right:-8%;width:680px;height:680px;border-radius:50%;background:radial-gradient(circle,rgba(124,92,240,0.13),transparent 62%);filter:blur(24px);animation:glowDrift 22s ease-in-out infinite reverse;}
+  .grid-dots{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:radial-gradient(rgba(255,255,255,0.045) 1px,transparent 1px);background-size:28px 28px;-webkit-mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 30%,transparent 80%);mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 30%,transparent 80%);}
+
+  .sidebar{position:sticky;top:0;align-self:flex-start;height:100vh;width:264px;flex:0 0 264px;z-index:5;display:flex;flex-direction:column;padding:28px 0;background:linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.012));border-right:1px solid rgba(255,255,255,0.07);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);}
+  .main{flex:1;min-width:0;position:relative;z-index:1;padding:34px 40px 60px;max-width:1520px;margin:0 auto;width:100%;}
+
+  /* Brand */
+  .brand{display:flex;align-items:center;gap:11px;padding:0 26px 26px;}
+  .brand-logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(145deg,var(--acc),var(--acc-d));display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px -6px var(--acc-glow-strong);}
+  .brand-logo .material-symbols-outlined{font-size:20px;color:var(--acc-on);}
+  .brand-title{margin:0;font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;letter-spacing:-0.01em;color:#F4F7FA;}
+  .brand-title span{color:var(--acc);}
+  .brand-sub{margin:2px 0 0;font-size:10.5px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#6B7482;}
+
+  /* Nav */
+  .nav{flex:1;display:flex;flex-direction:column;gap:4px;padding:0 14px;}
+  .nav-link{position:relative;display:flex;align-items:center;gap:13px;padding:11px 14px;border-radius:11px;color:#8A94A2;text-decoration:none;cursor:pointer;background:transparent;border:none;width:100%;text-align:left;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;letter-spacing:0.01em;transition:background .2s,color .2s;}
+  .nav-link:hover{background:rgba(255,255,255,0.05);color:#DCE3EB;}
+  .nav-link.active{background:rgba(255,255,255,0.045);color:#F4F7FA;}
+  .nav-link .navbar-ind{position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:0;border-radius:0 3px 3px 0;background:var(--acc);transition:height .2s;}
+  .nav-link.active .navbar-ind{height:60%;}
+  .nav-link .material-symbols-outlined{font-size:20px;}
+  .sb-cta{padding:0 18px;margin:14px 0 18px;}
+  .sb-foot{border-top:1px solid rgba(255,255,255,0.07);padding:14px 18px 0;display:flex;flex-direction:column;gap:2px;}
+  .user-badge{display:flex;align-items:center;gap:11px;padding:8px 8px 12px;}
+  .avatar{width:34px;height:34px;border-radius:50%;flex:0 0 34px;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,var(--acc),var(--acc-d));color:var(--acc-on);font-weight:700;font-size:14px;}
+  .user-badge .nm{margin:0;font-size:13px;font-weight:600;color:#EDF1F5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .user-badge .em{margin:1px 0 0;font-size:11.5px;color:#6B7482;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  /* Buttons */
+  .btn-primary{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border:none;border-radius:12px;cursor:pointer;background:linear-gradient(180deg,var(--acc),var(--acc-d));color:var(--acc-on);font-family:'IBM Plex Sans',sans-serif;font-size:13.5px;font-weight:700;letter-spacing:0.01em;box-shadow:0 10px 24px -10px var(--acc-glow-strong);transition:filter .2s,transform .1s;}
+  .btn-primary:hover{filter:brightness(1.07);}
+  .btn-primary:active{transform:translateY(1px);}
+  .btn-ghost{display:inline-flex;align-items:center;gap:7px;padding:10px 16px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.02);color:#C4CCD6;border-radius:11px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;transition:background .2s,border-color .2s;}
+  .btn-ghost:hover{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.2);}
+  .btn-accent{display:inline-flex;align-items:center;gap:7px;padding:10px 16px;border:1px solid var(--acc-border);background:var(--acc-tint);color:var(--acc);border-radius:11px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;transition:background .2s;}
+  .btn-accent:hover{background:var(--acc-tint-hover);}
+  .link-btn{display:inline-flex;align-items:center;gap:6px;border:none;background:transparent;color:#8A94A2;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;transition:color .2s;}
+  .link-btn:hover{color:var(--acc);}
+  .link-danger:hover{color:#FF7A7A;}
+  .material-symbols-outlined.ic-sm{font-size:16px;}
+
+  /* Cards */
+  .card{position:relative;background:linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018));border:1px solid rgba(255,255,255,0.08);border-radius:20px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.07),0 30px 60px -30px rgba(0,0,0,0.8);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);}
+  .card-head{padding:20px 22px;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;gap:10px;}
+  .card-head .material-symbols-outlined{font-size:20px;color:var(--acc);}
+  .card-title{margin:0;font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:600;color:#F4F7FA;}
+  .card-label{margin:0;font-size:11.5px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:#8A94A2;}
+
+  /* Header / eyebrow */
+  .eyebrow{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--acc);box-shadow:0 0 10px var(--acc);}
+  .eyebrow .lbl{font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#6B7482;}
+  .page-title{margin:0;font-family:'Space Grotesk',sans-serif;font-size:34px;font-weight:600;letter-spacing:-0.02em;color:#F4F7FA;line-height:1.05;}
+  .page-sub{margin:8px 0 0;font-size:15px;color:#9AA4B2;}
+
+  /* Fields */
+  .field-label{display:block;font-size:11.5px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:#8A94A2;margin-bottom:9px;}
+  .input-wrap{position:relative;}
+  .input-lead{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:18px;color:#6B7482;}
+  .input{width:100%;padding:11px 14px;background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.10);border-radius:11px;color:#EDF1F5;font-family:'IBM Plex Mono',monospace;font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s,background .2s;}
+  .input.with-icon{padding-left:38px;}
+  .input:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-tint);background:rgba(255,255,255,0.05);}
+  .select{width:100%;padding:11px 38px 11px 14px;background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.10);border-radius:11px;color:#EDF1F5;font-family:'IBM Plex Sans',sans-serif;font-size:14px;outline:none;appearance:none;cursor:pointer;transition:border-color .2s,box-shadow .2s;}
+  .select:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-tint);}
+  .select-chevron{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:20px;color:#6B7482;pointer-events:none;}
+  .mini-input{width:66px;padding:5px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#EDF1F5;font-family:'IBM Plex Mono',monospace;font-size:13px;text-align:right;outline:none;}
+  .mini-input:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-tint);}
+  .constraint-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .check-row{display:flex;align-items:center;gap:10px;cursor:pointer;}
+  .check-row span{font-size:13.5px;color:#C4CCD6;}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 8px 5px 11px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:9px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:500;color:#DCE3EB;}
+  .chip-x{display:flex;border:none;background:transparent;color:#6B7482;cursor:pointer;padding:0;transition:color .2s;}
+  .chip-x:hover{color:#FF7A7A;}
+  .status-msg{margin:12px 0 0;text-align:center;font-size:12.5px;color:#8A94A2;min-height:16px;}
+
+  /* Donut */
+  #donutChart{overflow:visible;}
+  .donut-segment{transition:stroke-dasharray 1s ease-out,stroke-dashoffset 1s ease-out,transform .25s cubic-bezier(.34,1.56,.64,1),filter .2s ease;transform-box:fill-box;transform-origin:center;cursor:pointer;}
+  .donut-segment:hover,.donut-segment.popped{transform:scale(1.1);filter:drop-shadow(0 10px 14px rgba(0,0,0,0.6));}
+  #donutCenter{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;color:#F4F7FA;transition:color .2s;}
+  #donutSubLabel{font-size:12px;color:#8A94A2;margin-top:2px;}
+  .legend-item{display:flex;align-items:center;gap:7px;cursor:pointer;transition:transform .2s ease;}
+  .legend-item.active{transform:scale(1.1);}
+  .legend-item.active .legend-label{color:#F4F7FA;font-weight:700;}
+  .legend-dot{width:10px;height:10px;border-radius:3px;transition:transform .2s ease,box-shadow .2s ease;}
+  .legend-item.active .legend-dot{transform:scale(1.3);box-shadow:0 0 0 3px rgba(255,255,255,0.08);}
+  .legend-label{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#C4CCD6;}
+
+  /* Metrics */
+  .metric-row{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.07);}
+  .metric-label{font-size:13px;color:#9AA4B2;max-width:135px;}
+  .metric-label .dim{color:#6B7482;}
+  .metric-val{font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:600;}
+  .metric-return{background:linear-gradient(180deg,#7DD3FC,#0EA5E9);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  .insight{margin-top:16px;display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:var(--acc-tint);border:1px solid var(--acc-border);border-radius:12px;}
+  .insight .material-symbols-outlined{font-size:19px;color:var(--acc);flex:0 0 auto;}
+  .insight p{margin:0;font-size:12.5px;line-height:1.5;color:#C4CCD6;}
+  .warn{margin-top:11px;display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:rgba(245,158,11,0.09);border:1px solid rgba(245,158,11,0.28);border-radius:12px;}
+  .warn .material-symbols-outlined{font-size:19px;color:#F5B03C;flex:0 0 auto;}
+  .warn p{margin:0;font-size:12.5px;line-height:1.5;color:#F0C98A;}
+
+  /* Tables */
+  .tbl{width:100%;border-collapse:collapse;}
+  .th{padding:12px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A94A2;}
+  .th-l{text-align:left;padding-left:22px;}
+  .th-last{padding-right:22px;}
+  .thead-row{background:rgba(255,255,255,0.025);}
+  .trow{border-top:1px solid rgba(255,255,255,0.06);transition:background .15s;}
+  .trow:hover{background:rgba(255,255,255,0.03);}
+  .td{padding:13px 16px;font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  .td-l{text-align:left;padding-left:22px;}
+  .td-r{text-align:right;}
+  .td-last{padding-right:22px;}
+  .pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;}
+  .pill .material-symbols-outlined{font-size:14px;}
+  .pill-buy{background:rgba(53,224,161,0.12);color:var(--acc);}
+  .pill-sell{background:rgba(255,122,122,0.12);color:#FF7A7A;}
+  .pill-hold{background:rgba(255,255,255,0.05);color:#9AA4B2;}
+  .table-head{padding:18px 22px;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;justify-content:space-between;align-items:center;}
+  .data-meta{padding:12px 22px;border-top:1px solid rgba(255,255,255,0.07);font-size:12px;color:#8A94A2;display:flex;gap:22px;flex-wrap:wrap;}
+  .empty-cell{padding:36px;text-align:center;font-size:13px;color:#6B7482;}
+
+  /* History */
+  .hist{border:1px solid rgba(255,255,255,0.08);border-radius:14px;overflow:hidden;background:rgba(255,255,255,0.015);}
+  .hist-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 18px;cursor:pointer;transition:background .2s;}
+  .hist-head:hover{background:rgba(255,255,255,0.03);}
+  .hist-tag{padding:3px 9px;border-radius:7px;background:rgba(255,255,255,0.05);font-size:11px;color:#9AA4B2;}
+
+  /* Grids */
+  .workspace-grid{display:grid;grid-template-columns:minmax(320px,384px) 1fr;gap:22px;align-items:start;}
+  .input-card{display:flex;flex-direction:column;}
+  .input-card .body{padding:22px;display:flex;flex-direction:column;gap:22px;}
+  .input-card .foot{padding:20px 22px;border-top:1px solid rgba(255,255,255,0.07);margin-top:auto;}
+  .results-col{display:flex;flex-direction:column;gap:22px;min-width:0;}
+  .results-top{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+  .donut-card{padding:22px;display:flex;flex-direction:column;min-height:340px;}
+  .donut-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .metrics-card{padding:22px;display:flex;flex-direction:column;}
+  .metrics-list{display:flex;flex-direction:column;gap:16px;flex:1;margin-top:2px;}
+
+  /* Modals */
+  .modal-overlay{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(4,7,11,0.7);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+  .modal{position:relative;width:100%;background:linear-gradient(180deg,rgba(24,29,38,0.98),rgba(16,20,27,0.98));border:1px solid rgba(255,255,255,0.10);border-radius:22px;box-shadow:0 40px 90px -30px rgba(0,0,0,0.9);padding:34px;animation:fadeUp .3s ease both;}
+  .modal-close{position:absolute;top:18px;right:18px;display:flex;border:none;background:rgba(255,255,255,0.05);border-radius:9px;padding:7px;color:#8A94A2;cursor:pointer;transition:background .2s,color .2s;}
+  .modal-close:hover{background:rgba(255,255,255,0.1);color:#EDF1F5;}
+  .modal-title{margin:0 0 6px;font-family:'Space Grotesk',sans-serif;font-size:23px;font-weight:600;color:#F4F7FA;}
+  .modal-sub{margin:0 0 22px;font-size:13.5px;color:#9AA4B2;line-height:1.6;}
+  .modal-form{display:flex;flex-direction:column;gap:13px;}
+  .m-input{width:100%;padding:12px 14px;background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.10);border-radius:11px;color:#EDF1F5;font-family:'IBM Plex Sans',sans-serif;font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s;}
+  .m-input:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-tint);}
+  textarea.m-input{resize:vertical;}
+  .form-error{margin:0;font-size:12.5px;color:#FF7A7A;}
+  .gbtn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:11px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.03);color:#EDF1F5;border-radius:11px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;margin-bottom:16px;transition:background .2s;}
+  .gbtn:hover{background:rgba(255,255,255,0.07);}
+  .gdiv{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+  .gdiv .line{flex:1;height:1px;background:rgba(255,255,255,0.1);}
+  .gdiv .or{font-size:12px;color:#6B7482;}
+  .link-inline{border:none;background:transparent;color:var(--acc);font-weight:600;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:13px;}
+
+  /* Mobile */
+  .mobile-bar{display:none;position:fixed;top:0;left:0;right:0;height:60px;z-index:20;align-items:center;justify-content:space-between;padding:0 20px;background:rgba(8,11,16,0.9);border-bottom:1px solid rgba(255,255,255,0.07);backdrop-filter:blur(10px);}
+  .mobile-menu{position:fixed;inset:0;z-index:30;}
+  .mobile-menu .scrim{position:absolute;inset:0;background:rgba(0,0,0,0.5);}
+  .mobile-menu .drawer{position:absolute;left:0;top:0;height:100%;width:260px;background:#0C1017;border-right:1px solid rgba(255,255,255,0.08);padding:24px 14px;display:flex;flex-direction:column;gap:4px;}
+  @media (max-width:1023px){.sidebar{display:none;}.mobile-bar{display:flex;}.main{padding:76px 18px 44px;}.workspace-grid{grid-template-columns:1fr;}}
+  @media (min-width:1024px){.mobile-menu{display:none!important;}}
+  @media (max-width:760px){.results-top{grid-template-columns:1fr;}}
 </style>
 </head>
-<body class="bg-background text-on-surface font-body-md min-h-screen flex">
+<body>
+<div class="app">
+  <!-- ambient background -->
+  <div class="amb"><div class="b1"></div><div class="b2"></div></div>
+  <div class="grid-dots"></div>
 
-<!-- Sidebar -->
-<nav class="hidden lg:flex flex-col h-screen w-64 bg-surface-container-lowest border-r border-outline-variant fixed left-0 top-0 py-lg z-10">
-  <div class="px-margin mb-8">
-    <h1 class="font-headline-sm text-headline-sm font-black text-primary">InvestEdge Pro</h1>
-    <p class="font-label-md text-label-md text-on-surface-variant mt-1">Institutional Grade</p>
-  </div>
-  <div class="flex-1 flex flex-col gap-2 w-full">
-    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-on-surface-variant hover:bg-surface-container-low" data-view="dashboard" href="#">
-      <span class="material-symbols-outlined mr-3">dashboard</span>
-      <span class="font-label-md text-label-md">Dashboard</span>
-    </a>
-    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-on-surface-variant hover:bg-surface-container-low" data-view="optimizer" href="#">
-      <span class="material-symbols-outlined mr-3">tune</span>
-      <span class="font-label-md text-label-md">Optimizer</span>
-    </a>
-    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-on-surface-variant hover:bg-surface-container-low" data-view="history" href="#">
-      <span class="material-symbols-outlined mr-3">account_balance_wallet</span>
-      <span class="font-label-md text-label-md">History</span>
-    </a>
-    <a class="nav-link group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low" data-modal="aboutModal" href="#">
-      <span class="material-symbols-outlined mr-3">settings</span>
-      <span class="font-label-md text-label-md">About</span>
-    </a>
-  </div>
-  <div class="px-margin mb-8">
-    <button id="newOptimizationBtn" class="w-full bg-[#10B981] hover:bg-[#059669] text-on-primary font-label-md text-label-md py-3 rounded transition-colors flex items-center justify-center gap-2">
-      <span class="material-symbols-outlined text-sm">add</span> New Optimization
-    </button>
-  </div>
-  <div class="flex flex-col gap-2 w-full border-t border-outline-variant pt-4">
-    <div id="userBadge" class="hidden px-5 pb-1">
-      <p id="userBadgeName" class="font-label-md text-label-md text-on-surface truncate"></p>
-      <p id="userBadgeEmail" class="font-body-sm text-body-sm text-on-surface-variant truncate"></p>
-    </div>
-    <a class="group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low" data-modal="contactModal" href="#">
-      <span class="material-symbols-outlined mr-3">help</span>
-      <span class="font-label-md text-label-md">Support</span>
-    </a>
-    <button id="authBtn" class="group flex items-center py-3 px-4 duration-200 text-on-surface-variant pl-5 hover:bg-surface-container-low w-full text-left">
-      <span id="authIcon" class="material-symbols-outlined mr-3">login</span>
-      <span id="authLabel" class="font-label-md text-label-md">Sign In</span>
-    </button>
-  </div>
-</nav>
-
-<!-- Mobile top bar -->
-<header class="lg:hidden flex justify-between items-center w-full px-margin h-16 bg-surface border-b border-outline-variant fixed top-0 z-20">
-  <h1 class="font-headline-md text-headline-md font-bold text-primary">InvestEdge</h1>
-  <button id="mobileMenuBtn" class="text-primary"><span class="material-symbols-outlined">menu</span></button>
-</header>
-
-<!-- Mobile slide-out menu -->
-<div id="mobileMenu" class="lg:hidden hidden fixed inset-0 z-30">
-  <div class="absolute inset-0 bg-black/40" data-close-mobile></div>
-  <nav class="absolute left-0 top-0 h-full w-64 bg-surface-container-lowest border-r border-outline-variant py-lg flex flex-col">
-    <div class="px-margin mb-8 flex items-center justify-between">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="brand">
+      <div class="brand-logo"><span class="material-symbols-outlined">trending_up</span></div>
       <div>
-        <h1 class="font-headline-sm text-headline-sm font-black text-primary">InvestEdge Pro</h1>
-        <p class="font-label-md text-label-md text-on-surface-variant mt-1">Institutional Grade</p>
+        <h1 class="brand-title">InvestEdge<span> Pro</span></h1>
+        <p class="brand-sub">Institutional Grade</p>
       </div>
-      <button data-close-mobile class="text-on-surface-variant"><span class="material-symbols-outlined">close</span></button>
     </div>
-    <a class="nav-link flex items-center py-3 px-5 text-on-surface-variant hover:bg-surface-container-low" data-view="optimizer" href="#"><span class="material-symbols-outlined mr-3">tune</span><span class="font-label-md text-label-md">Optimizer</span></a>
-    <a class="nav-link flex items-center py-3 px-5 text-on-surface-variant hover:bg-surface-container-low" data-view="history" href="#"><span class="material-symbols-outlined mr-3">account_balance_wallet</span><span class="font-label-md text-label-md">History</span></a>
-    <a class="flex items-center py-3 px-5 text-on-surface-variant hover:bg-surface-container-low" data-modal="aboutModal" href="#"><span class="material-symbols-outlined mr-3">settings</span><span class="font-label-md text-label-md">About</span></a>
-    <a class="flex items-center py-3 px-5 text-on-surface-variant hover:bg-surface-container-low" data-modal="contactModal" href="#"><span class="material-symbols-outlined mr-3">help</span><span class="font-label-md text-label-md">Support</span></a>
+    <div class="nav">
+      <a class="nav-link" data-view="dashboard" href="#"><span class="navbar-ind"></span><span class="material-symbols-outlined">dashboard</span><span>Dashboard</span></a>
+      <a class="nav-link" data-view="optimizer" href="#"><span class="navbar-ind"></span><span class="material-symbols-outlined">tune</span><span>Optimizer</span></a>
+      <a class="nav-link" data-view="history" href="#"><span class="navbar-ind"></span><span class="material-symbols-outlined">account_balance_wallet</span><span>History</span></a>
+      <a class="nav-link" data-modal="aboutModal" href="#"><span class="navbar-ind"></span><span class="material-symbols-outlined">info</span><span>About</span></a>
+    </div>
+    <div class="sb-cta">
+      <button id="newOptimizationBtn" class="btn-primary"><span class="material-symbols-outlined" style="font-size:18px;">bolt</span> New Optimization</button>
+    </div>
+    <div class="sb-foot">
+      <div id="userBadge" class="hidden user-badge">
+        <div id="userBadgeAvatar" class="avatar">U</div>
+        <div style="min-width:0;">
+          <p id="userBadgeName" class="nm"></p>
+          <p id="userBadgeEmail" class="em"></p>
+        </div>
+      </div>
+      <a class="nav-link" data-modal="contactModal" href="#"><span class="material-symbols-outlined">help</span><span>Support</span></a>
+      <button id="authBtn" class="nav-link"><span id="authIcon" class="material-symbols-outlined">login</span><span id="authLabel">Sign In</span></button>
+    </div>
   </nav>
-</div>
 
-<!-- Main workspace -->
-<main class="flex-1 lg:ml-64 pt-16 lg:pt-0 p-margin max-w-[1440px] mx-auto w-full">
-  <div id="dashboardView">
-  <header class="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
-    <div>
-      <h2 class="font-headline-lg text-headline-lg text-primary">Portfolio Optimizer</h2>
-      <p class="font-body-md text-body-md text-on-surface-variant mt-2">Sharpe ratio maximization &amp; risk parity analysis.</p>
-    </div>
-    <div class="flex gap-4">
-      <button id="loadPresetBtn" class="px-4 py-2 border border-outline-variant text-on-surface-variant rounded font-label-md text-label-md hover:bg-surface-container-low transition-colors">Load Preset</button>
-      <button id="savePresetBtn" class="px-4 py-2 border border-[#2563EB] text-[#2563EB] rounded font-label-md text-label-md hover:bg-blue-50 transition-colors">Save Parameters</button>
-    </div>
+  <!-- Mobile top bar -->
+  <header class="mobile-bar">
+    <h1 class="brand-title" style="font-size:17px;">InvestEdge<span> Pro</span></h1>
+    <button id="mobileMenuBtn" class="link-btn" style="color:#EDF1F5;"><span class="material-symbols-outlined">menu</span></button>
   </header>
 
-  <!-- Bento grid -->
-  <div class="grid grid-cols-1 xl:grid-cols-12 gap-gutter">
-    <!-- Input & Parameters -->
-    <div class="xl:col-span-4 bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow flex flex-col h-full">
-      <div class="p-md border-b border-outline-variant">
-        <h3 class="font-headline-md text-headline-md text-primary">Input &amp; Parameters</h3>
+  <!-- Mobile slide-out menu -->
+  <div id="mobileMenu" class="mobile-menu hidden">
+    <div class="scrim" data-close-mobile></div>
+    <nav class="drawer">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:0 8px 16px;">
+        <h1 class="brand-title" style="font-size:17px;">InvestEdge<span> Pro</span></h1>
+        <button data-close-mobile class="link-btn" style="color:#8A94A2;"><span class="material-symbols-outlined">close</span></button>
       </div>
-      <div class="p-md flex-1 flex flex-col gap-6">
-        <!-- Portfolio Value -->
-        <div>
-          <label class="block font-label-md text-label-md text-on-surface mb-2" for="portfolioValue">Total Portfolio Value (USD)</label>
-          <div class="relative">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant material-symbols-outlined text-sm">attach_money</span>
-            <input id="portfolioValue" class="w-full pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded font-mono-data text-mono-data focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all" type="text" value="1,000,000"/>
-          </div>
-        </div>
-        <!-- Tickers -->
-        <div>
-          <label class="block font-label-md text-label-md text-on-surface mb-2" for="tickerInput">Target Assets (Tickers)</label>
-          <div id="tickerChips" class="flex flex-wrap gap-2 mb-3"></div>
-          <div class="relative">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant material-symbols-outlined text-sm">search</span>
-            <input id="tickerInput" class="w-full pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded font-mono-data text-mono-data focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all" placeholder="Add ticker symbol..." type="text"/>
-          </div>
-        </div>
-        <!-- Strategy -->
-        <div>
-          <label class="block font-label-md text-label-md text-on-surface mb-2" for="strategy">Optimization Strategy</label>
-          <select id="strategy" class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all appearance-none cursor-pointer">
-            <option value="max_sharpe">Maximize Sharpe Ratio</option>
-            <option value="min_variance">Minimize Variance (Global Minimum Variance)</option>
-            <option value="risk_parity">Risk Parity</option>
-            <option value="max_return_target_risk">Maximize Return for Target Risk</option>
-          </select>
-          <!-- Target volatility: only relevant for the "target risk" strategy -->
-          <div id="targetVolWrap" class="mt-3 hidden">
-            <label class="flex items-center gap-3">
-              <span class="font-body-md text-body-md">Target annual volatility</span>
-              <input id="targetVol" class="w-20 px-2 py-1 bg-surface border border-outline-variant rounded font-mono-data text-mono-data text-right" type="text" value="15%"/>
-            </label>
-          </div>
-        </div>
-        <!-- Constraints -->
-        <div>
-          <label class="block font-label-md text-label-md text-on-surface mb-2">Constraints</label>
-          <div class="space-y-3">
-            <label class="flex items-center gap-2" title="This optimizer is always long-only.">
-              <input checked disabled class="rounded border-outline-variant text-[#2563EB] focus:ring-[#2563EB]" type="checkbox"/>
-              <span class="font-body-md text-body-md">Long only (weights &gt;= 0)</span>
-            </label>
-            <div class="flex items-center gap-4">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input id="maxWeightEnabled" checked class="rounded border-outline-variant text-[#2563EB] focus:ring-[#2563EB]" type="checkbox"/>
-                <span class="font-body-md text-body-md">Max weight per asset</span>
-              </label>
-              <input id="maxWeight" class="w-20 px-2 py-1 bg-surface border border-outline-variant rounded font-mono-data text-mono-data text-right" type="text" value="30%"/>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="p-md border-t border-outline-variant bg-surface-bright mt-auto">
-        <button id="optimizeBtn" class="w-full bg-[#2563EB] hover:bg-[#1D4ED8] text-on-primary font-label-md text-label-md py-3 rounded transition-colors flex items-center justify-center gap-2">
-          <span class="material-symbols-outlined">bolt</span> Optimize Portfolio
-        </button>
-        <p id="statusMessage" class="font-body-sm text-body-sm text-on-surface-variant mt-3 text-center"></p>
-      </div>
-    </div>
-
-    <!-- Results -->
-    <div class="xl:col-span-8 flex flex-col gap-gutter h-full">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-gutter">
-        <!-- Donut -->
-        <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow p-md flex flex-col items-center justify-center min-h-[300px]">
-          <h4 class="font-label-md text-label-md text-on-surface mb-4 w-full text-left">Target Asset Allocation</h4>
-          <div class="relative w-48 h-48 overflow-visible">
-            <svg id="donutChart" class="transform -rotate-90 w-full h-full overflow-visible" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" fill="transparent" r="40" stroke="#f1f5f9" stroke-width="20"></circle>
-            </svg>
-            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span id="donutCenter" class="font-headline-md text-headline-md text-primary font-bold">—</span>
-              <span id="donutSubLabel" class="font-body-sm text-body-sm text-on-surface-variant">Allocated</span>
-            </div>
-          </div>
-          <div id="donutLegend" class="flex flex-wrap justify-center gap-4 mt-6">
-            <span class="font-body-sm text-body-sm text-on-surface-variant">Run an optimization to see allocation.</span>
-          </div>
-        </div>
-        <!-- Metrics -->
-        <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow p-md flex flex-col justify-between">
-          <h4 class="font-label-md text-label-md text-on-surface mb-4">Optimization Metrics</h4>
-          <div class="space-y-4 flex-1">
-            <div class="flex justify-between items-end border-b border-outline-variant pb-2">
-              <span class="font-body-md text-body-md text-on-surface-variant">Annualized Return (backtest)</span>
-              <span id="metricReturn" class="font-headline-md text-headline-md text-[#10B981]">—</span>
-            </div>
-            <div class="flex justify-between items-end border-b border-outline-variant pb-2">
-              <span class="font-body-md text-body-md text-on-surface-variant">Annual Volatility (Risk)</span>
-              <span id="metricVol" class="font-headline-md text-headline-md text-primary">—</span>
-            </div>
-            <div class="flex justify-between items-end border-b border-outline-variant pb-2">
-              <span class="font-body-md text-body-md text-on-surface-variant">Sharpe Ratio (Rf=2%)</span>
-              <span id="metricSharpe" class="font-headline-md text-headline-md text-primary">—</span>
-            </div>
-          </div>
-          <div class="mt-4 p-3 bg-blue-50 border border-[#2563EB]/20 rounded-lg flex items-start gap-3">
-            <span class="material-symbols-outlined text-[#2563EB] text-xl">insights</span>
-            <p id="insightText" class="font-body-sm text-body-sm text-[#1E3A8A]">This allocation maximizes risk-adjusted returns based on historical data covariance.</p>
-          </div>
-          <div id="metricWarning" class="hidden mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-3">
-            <span class="material-symbols-outlined text-amber-600 text-xl">warning</span>
-            <p id="metricWarningText" class="font-body-sm text-body-sm text-amber-800"></p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Action plan table -->
-      <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow overflow-hidden flex-1">
-        <div class="p-md border-b border-outline-variant flex justify-between items-center bg-surface-bright">
-          <h4 class="font-label-md text-label-md text-on-surface">Action Plan &amp; Weights</h4>
-          <button id="exportCsvBtn" class="text-on-surface-variant hover:text-[#2563EB] transition-colors flex items-center gap-1">
-            <span class="material-symbols-outlined text-sm">download</span>
-            <span class="font-label-md text-label-md text-xs">Export CSV</span>
-          </button>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse">
-            <thead>
-              <tr class="bg-[#F8FAFC]">
-                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant">Ticker</th>
-                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Current Weight</th>
-                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Optimal Weight</th>
-                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Target Value (USD)</th>
-                <th class="p-4 font-mono-data text-[12px] uppercase text-[#0F172A] border-b border-outline-variant text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody id="resultsBody">
-              <tr><td colspan="5" class="p-8 text-center font-body-sm text-body-sm text-on-surface-variant">No results yet — enter tickers and click Optimize Portfolio.</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div id="dataMeta" class="px-4 py-3 font-body-sm text-body-sm text-on-surface-variant border-t border-outline-variant hidden"></div>
-      </div>
-    </div>
+      <a class="nav-link" data-view="optimizer" href="#"><span class="material-symbols-outlined">tune</span><span>Optimizer</span></a>
+      <a class="nav-link" data-view="history" href="#"><span class="material-symbols-outlined">account_balance_wallet</span><span>History</span></a>
+      <a class="nav-link" data-modal="aboutModal" href="#"><span class="material-symbols-outlined">info</span><span>About</span></a>
+      <a class="nav-link" data-modal="contactModal" href="#"><span class="material-symbols-outlined">help</span><span>Support</span></a>
+    </nav>
   </div>
-  </div><!-- /dashboardView -->
 
-  <!-- History -->
-  <section id="historySection" class="hidden">
-    <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow overflow-hidden">
-      <div class="p-md border-b border-outline-variant flex justify-between items-center bg-surface-bright">
-        <h4 class="font-label-md text-label-md text-on-surface">Optimization History</h4>
-        <button id="clearHistoryBtn" class="text-on-surface-variant hover:text-error transition-colors flex items-center gap-1">
-          <span class="material-symbols-outlined text-sm">delete</span>
-          <span class="font-label-md text-label-md text-xs">Clear History</span>
-        </button>
+  <!-- Main -->
+  <main class="main">
+    <!-- Optimizer / Dashboard -->
+    <div id="dashboardView">
+      <header style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:30px;animation:fadeUp .5s ease both;">
+        <div>
+          <div class="eyebrow"><span class="dot"></span><span class="lbl">Live Workspace</span></div>
+          <h2 class="page-title">Portfolio Optimizer</h2>
+          <p class="page-sub">Sharpe-ratio maximization &amp; risk-parity analysis, in real time.</p>
+        </div>
+        <div style="display:flex;gap:12px;">
+          <button id="loadPresetBtn" class="btn-ghost"><span class="material-symbols-outlined" style="font-size:17px;">history_toggle_off</span> Load Preset</button>
+          <button id="savePresetBtn" class="btn-accent"><span class="material-symbols-outlined" style="font-size:17px;">bookmark_add</span> Save Parameters</button>
+        </div>
+      </header>
+
+      <div class="workspace-grid">
+        <!-- Input card -->
+        <div class="card input-card" style="animation:fadeUp .5s ease .05s both;">
+          <div class="card-head"><span class="material-symbols-outlined">tune</span><h3 class="card-title">Input &amp; Parameters</h3></div>
+          <div class="body">
+            <div>
+              <label class="field-label" for="portfolioValue">Total Portfolio Value (USD)</label>
+              <div class="input-wrap">
+                <span class="input-lead material-symbols-outlined">attach_money</span>
+                <input id="portfolioValue" class="input with-icon" type="text" value="1,000,000"/>
+              </div>
+            </div>
+            <div>
+              <label class="field-label" for="tickerInput">Target Assets (Tickers)</label>
+              <div id="tickerChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:11px;"></div>
+              <div class="input-wrap">
+                <span class="input-lead material-symbols-outlined">search</span>
+                <input id="tickerInput" class="input with-icon" placeholder="Add ticker &amp; press Enter…" type="text"/>
+              </div>
+            </div>
+            <div>
+              <label class="field-label" for="strategy">Optimization Strategy</label>
+              <div class="input-wrap">
+                <select id="strategy" class="select">
+                  <option value="max_sharpe">Maximize Sharpe Ratio</option>
+                  <option value="min_variance">Minimize Variance (Global Min. Variance)</option>
+                  <option value="risk_parity">Risk Parity</option>
+                  <option value="max_return_target_risk">Maximize Return for Target Risk</option>
+                </select>
+                <span class="select-chevron material-symbols-outlined">expand_more</span>
+              </div>
+              <div id="targetVolWrap" class="hidden" style="margin-top:12px;">
+                <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:10px;">
+                  <span style="font-size:13.5px;color:#C4CCD6;">Target annual volatility</span>
+                  <input id="targetVol" class="mini-input" type="text" value="15%"/>
+                </label>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">Constraints</label>
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <label class="check-row" style="opacity:0.6;cursor:default;" title="This optimizer is always long-only.">
+                  <input checked disabled type="checkbox"/><span>Long only (weights &gt;= 0)</span>
+                </label>
+                <div class="constraint-row">
+                  <label class="check-row">
+                    <input id="maxWeightEnabled" checked type="checkbox"/><span>Max weight per asset</span>
+                  </label>
+                  <input id="maxWeight" class="mini-input" type="text" value="30%"/>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="foot">
+            <button id="optimizeBtn" class="btn-primary" style="padding:13px;font-size:14.5px;"><span class="material-symbols-outlined" style="font-size:19px;">bolt</span> Optimize Portfolio</button>
+            <p id="statusMessage" class="status-msg"></p>
+          </div>
+        </div>
+
+        <!-- Results column -->
+        <div class="results-col">
+          <div class="results-top">
+            <!-- Donut -->
+            <div class="card donut-card" style="animation:fadeUp .5s ease .1s both;">
+              <h4 class="card-label">Target Asset Allocation</h4>
+              <div class="donut-wrap">
+                <div style="position:relative;width:190px;height:190px;">
+                  <svg id="donutChart" viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
+                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="rgba(255,255,255,0.06)" stroke-width="18"></circle>
+                  </svg>
+                  <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;">
+                    <span id="donutCenter">—</span>
+                    <span id="donutSubLabel">Allocated</span>
+                  </div>
+                </div>
+                <div id="donutLegend" style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px 14px;margin-top:22px;">
+                  <span style="font-size:12.5px;color:#6B7482;">Run an optimization to see allocation.</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Metrics -->
+            <div class="card metrics-card" style="animation:fadeUp .5s ease .15s both;">
+              <h4 class="card-label" style="margin-bottom:16px;">Optimization Metrics</h4>
+              <div class="metrics-list">
+                <div class="metric-row"><span class="metric-label">Annualized Return <span class="dim">(backtest)</span></span><span id="metricReturn" class="metric-val metric-return">—</span></div>
+                <div class="metric-row"><span class="metric-label">Annual Volatility <span class="dim">(risk)</span></span><span id="metricVol" class="metric-val" style="color:#F4F7FA;">—</span></div>
+                <div class="metric-row"><span class="metric-label">Sharpe Ratio <span class="dim">(Rf=2%)</span></span><span id="metricSharpe" class="metric-val" style="color:var(--acc);">—</span></div>
+              </div>
+              <div class="insight"><span class="material-symbols-outlined">insights</span><p id="insightText">This allocation maximizes risk-adjusted returns based on historical data covariance.</p></div>
+              <div id="metricWarning" class="warn hidden"><span class="material-symbols-outlined">warning</span><p id="metricWarningText"></p></div>
+            </div>
+          </div>
+
+          <!-- Action table -->
+          <div class="card" style="overflow:hidden;animation:fadeUp .5s ease .2s both;">
+            <div class="table-head">
+              <h4 class="card-label">Action Plan &amp; Weights</h4>
+              <button id="exportCsvBtn" class="link-btn"><span class="material-symbols-outlined ic-sm">download</span> Export CSV</button>
+            </div>
+            <div style="overflow-x:auto;">
+              <table class="tbl">
+                <thead>
+                  <tr class="thead-row">
+                    <th class="th th-l">Ticker</th>
+                    <th class="th">Current</th>
+                    <th class="th">Optimal</th>
+                    <th class="th">Target Value</th>
+                    <th class="th th-last">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="resultsBody">
+                  <tr><td colspan="5" class="empty-cell">No results yet — enter tickers and click Optimize Portfolio.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div id="dataMeta" class="data-meta hidden"></div>
+          </div>
+        </div>
       </div>
-      <div id="historyList" class="p-md flex flex-col gap-3"></div>
     </div>
-  </section>
-</main>
+
+    <!-- History -->
+    <section id="historySection" class="hidden">
+      <header style="margin-bottom:28px;animation:fadeUp .5s ease both;">
+        <div class="eyebrow"><span class="dot"></span><span class="lbl">Saved Runs</span></div>
+        <h2 class="page-title">Optimization History</h2>
+      </header>
+      <div class="card" style="overflow:hidden;animation:fadeUp .5s ease .05s both;">
+        <div class="table-head">
+          <h4 class="card-label">Recent Optimizations</h4>
+          <button id="clearHistoryBtn" class="link-btn link-danger"><span class="material-symbols-outlined ic-sm">delete</span> Clear History</button>
+        </div>
+        <div id="historyList" style="padding:18px;display:flex;flex-direction:column;gap:12px;"></div>
+      </div>
+    </section>
+  </main>
+</div>
 
 <!-- About modal -->
-<div id="aboutModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/50 p-4">
-  <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow max-w-2xl w-full p-margin relative">
-    <button data-close-modal="aboutModal" class="absolute top-5 right-5 text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">close</span></button>
-    <h2 class="font-headline-md text-headline-md text-primary mb-4">About InvestEdge</h2>
-    <p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
-      InvestEdge is a research-driven portfolio tool built by three high-school students at the intersection of finance and computer science. Our platform uses a Max-Sharpe (risk-adjusted return) optimization framework—supported by back-testing and transparent data—to propose diversified portfolio weights and visualize risk/return trade-offs. Our goal is to help users make more informed investment decisions through clear, accessible analytics. InvestEdge is an educational resource and does not provide financial advice.
+<div id="aboutModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:640px;">
+    <button data-close-modal="aboutModal" class="modal-close"><span class="material-symbols-outlined" style="font-size:20px;">close</span></button>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <div class="brand-logo" style="width:40px;height:40px;border-radius:12px;"><span class="material-symbols-outlined" style="font-size:22px;">trending_up</span></div>
+      <h2 class="modal-title" style="margin:0;">About InvestEdge</h2>
+    </div>
+    <p style="margin:0;font-size:14.5px;line-height:1.7;color:#9AA4B2;">
+      InvestEdge is a research-driven portfolio tool built by three high-school students at the intersection of finance and computer science. Our platform uses a Max-Sharpe (risk-adjusted return) optimization framework — supported by back-testing and transparent data — to propose diversified portfolio weights and visualize risk/return trade-offs. Our goal is to help users make more informed investment decisions through clear, accessible analytics. InvestEdge is an educational resource and does not provide financial advice.
     </p>
   </div>
 </div>
 
 <!-- Contact modal -->
-<div id="contactModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/50 p-4">
-  <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow max-w-2xl w-full p-margin relative">
-    <button data-close-modal="contactModal" class="absolute top-5 right-5 text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">close</span></button>
-    <h2 class="font-headline-md text-headline-md text-primary mb-2">Contact Us</h2>
-    <p class="font-body-md text-body-md text-on-surface-variant mb-6">We would love to hear your advice! Feel free to reach out about any questions or suggestions to make InvestEdge better!</p>
-    <form id="contactForm" class="flex flex-col gap-4">
-      <input id="contactName" type="text" placeholder="Your Name" required class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
-      <input id="contactEmail" type="email" placeholder="Your Email" required class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
-      <textarea id="contactMessage" rows="5" placeholder="Your Message" required class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"></textarea>
-      <button type="submit" class="self-end px-6 bg-[#2563EB] hover:bg-[#1D4ED8] text-on-primary font-label-md text-label-md py-3 rounded transition-colors">Send</button>
-      <div id="contactStatus" class="font-body-sm text-body-sm text-on-surface-variant"></div>
+<div id="contactModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:560px;">
+    <button data-close-modal="contactModal" class="modal-close"><span class="material-symbols-outlined" style="font-size:20px;">close</span></button>
+    <h2 class="modal-title">Contact Us</h2>
+    <p class="modal-sub">We'd love to hear your advice! Reach out about any questions or suggestions to make InvestEdge better.</p>
+    <form id="contactForm" class="modal-form">
+      <input id="contactName" type="text" placeholder="Your Name" required class="m-input"/>
+      <input id="contactEmail" type="email" placeholder="Your Email" required class="m-input"/>
+      <textarea id="contactMessage" rows="4" placeholder="Your Message" required class="m-input"></textarea>
+      <button type="submit" class="btn-primary" style="align-self:flex-end;width:auto;padding:11px 26px;">Send</button>
+      <p id="contactStatus" style="margin:0;font-size:12.5px;color:var(--acc);min-height:14px;"></p>
     </form>
   </div>
 </div>
 
 <!-- Login / register modal -->
-<div id="loginModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/50 p-4">
-  <div class="bg-surface-container-lowest rounded-xl border border-outline-variant ambient-shadow max-w-md w-full p-margin relative">
-    <button data-close-modal="loginModal" class="absolute top-5 right-5 text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined">close</span></button>
-    <h2 id="loginTitle" class="font-headline-md text-headline-md text-primary mb-1">Sign In</h2>
-    <p id="loginSubtitle" class="font-body-sm text-body-sm text-on-surface-variant mb-6">Sign in to save your optimization history to your account and access it from anywhere.</p>
+<div id="loginModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:440px;">
+    <button data-close-modal="loginModal" class="modal-close"><span class="material-symbols-outlined" style="font-size:20px;">close</span></button>
+    <h2 id="loginTitle" class="modal-title">Sign In</h2>
+    <p id="loginSubtitle" class="modal-sub">Sign in to save your optimization history to your account and access it from anywhere.</p>
 
-    <button id="googleBtn" type="button" class="hidden w-full flex items-center justify-center gap-3 px-4 py-2.5 border border-outline-variant rounded font-label-md text-label-md hover:bg-surface-container-low transition-colors mb-4">
+    <button id="googleBtn" type="button" class="gbtn hidden">
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95L3.97 7.3C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
       Continue with Google
     </button>
-    <div id="googleDivider" class="hidden flex items-center gap-3 mb-4">
-      <div class="flex-1 h-px bg-outline-variant"></div>
-      <span class="font-body-sm text-body-sm text-on-surface-variant">or</span>
-      <div class="flex-1 h-px bg-outline-variant"></div>
-    </div>
+    <div id="googleDivider" class="gdiv hidden"><div class="line"></div><span class="or">or</span><div class="line"></div></div>
 
-    <form id="loginForm" class="flex flex-col gap-4">
-      <input id="loginName" type="text" placeholder="Display Name" autocomplete="name" class="hidden w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
-      <input id="loginEmail" type="email" placeholder="Email" required autocomplete="email" class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
-      <input id="loginPassword" type="password" placeholder="Password (min 8 characters)" required minlength="8" autocomplete="current-password" class="w-full px-4 py-2 bg-surface border border-outline-variant rounded font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all"/>
-      <p id="loginError" class="hidden font-body-sm text-body-sm text-error"></p>
-      <button id="loginSubmit" type="submit" class="px-6 bg-[#2563EB] hover:bg-[#1D4ED8] text-on-primary font-label-md text-label-md py-3 rounded transition-colors">Sign In</button>
+    <form id="loginForm" class="modal-form">
+      <input id="loginName" type="text" placeholder="Display Name" autocomplete="name" class="m-input hidden"/>
+      <input id="loginEmail" type="email" placeholder="Email" required autocomplete="email" class="m-input"/>
+      <input id="loginPassword" type="password" placeholder="Password (min 8 characters)" required minlength="8" autocomplete="current-password" class="m-input"/>
+      <p id="loginError" class="form-error hidden"></p>
+      <button id="loginSubmit" type="submit" class="btn-primary" style="font-size:14.5px;">Sign In</button>
     </form>
-    <p class="font-body-sm text-body-sm text-on-surface-variant text-center mt-4">
+    <p style="margin:18px 0 0;text-align:center;font-size:13px;color:#8A94A2;">
       <span id="loginToggleText">Don't have an account?</span>
-      <button id="loginToggle" type="button" class="text-[#2563EB] font-semibold hover:underline ml-1">Create one</button>
+      <button id="loginToggle" type="button" class="link-inline" style="margin-left:4px;">Create one</button>
     </p>
   </div>
 </div>
 
 <script>
   // ── State ────────────────────────────────────────────────────────
-  const PALETTE = ['#2563EB','#10B981','#F59E0B','#6366F1','#EF4444','#14B8A6','#EC4899','#8B5CF6','#0EA5E9','#F97316'];
+  const PALETTE = ['#35E0A1','#56B4F5','#F5C36B','#A78BFA','#FF7A7A','#2DD4BF','#F472B6','#818CF8','#38BDF8','#FB923C'];
   const CIRC = 2 * Math.PI * 40; // donut circumference for r=40
   const HISTORY_KEY = 'investedge_history';
   const PRESET_KEY = 'investedge_preset';
   const MAX_HISTORY = 20;
+  const STRAT_LABEL = { max_sharpe: 'Max Sharpe', min_variance: 'Min Variance', risk_parity: 'Risk Parity', max_return_target_risk: 'Target Risk' };
 
   let tickers = ['AAPL', 'MSFT', 'GOOGL', 'TSLA'];
   let lastResult = null; // { data, portfolioValue }
@@ -403,12 +493,7 @@
   // ── Ticker chips ─────────────────────────────────────────────────
   function renderChips() {
     $('tickerChips').innerHTML = tickers.map((t, i) => `
-      <span class="inline-flex items-center gap-1 px-3 py-1 bg-surface-container-low border border-outline-variant rounded-full font-mono-data text-mono-data text-xs">
-        ${t}
-        <button class="hover:text-error transition-colors" data-remove="${i}" aria-label="Remove ${t}">
-          <span class="material-symbols-outlined text-[14px]">close</span>
-        </button>
-      </span>`).join('');
+      <span class="chip">${t}<button class="chip-x" data-remove="${i}" aria-label="Remove ${t}"><span class="material-symbols-outlined" style="font-size:15px;">close</span></button></span>`).join('');
   }
   $('tickerChips').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-remove]');
@@ -477,21 +562,21 @@
     // and shift every color index.
     const entries = Object.entries(weights).filter(([, w]) => w > 0);
     let offset = 0;
-    let segs = `<circle cx="50" cy="50" fill="transparent" r="40" stroke="#f1f5f9" stroke-width="20"></circle>`;
+    let segs = `<circle cx="50" cy="50" fill="transparent" r="40" stroke="rgba(255,255,255,0.06)" stroke-width="18"></circle>`;
     entries.forEach(([t, w], i) => {
       const len = w * CIRC;
       const color = PALETTE[i % PALETTE.length];
       segs += `<circle class="donut-segment" cx="50" cy="50" fill="transparent" r="40"
-        stroke="${color}" stroke-width="20"
+        stroke="${color}" stroke-width="18"
         stroke-dasharray="${len.toFixed(2)} ${CIRC.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"
         data-ticker="${t}" data-pct="${(w * 100).toFixed(0)}" data-color="${color}"></circle>`;
       offset += len;
     });
     svg.innerHTML = segs;
     $('donutLegend').innerHTML = entries.map(([t, w], i) => `
-      <div class="legend-item flex items-center gap-2" data-ticker="${t}">
-        <div class="legend-dot w-3 h-3 rounded-full" style="background:${PALETTE[i % PALETTE.length]}"></div>
-        <span class="legend-label font-mono-data text-mono-data text-xs">${t} ${(w * 100).toFixed(0)}%</span>
+      <div class="legend-item" data-ticker="${t}">
+        <span class="legend-dot" style="background:${PALETTE[i % PALETTE.length]}"></span>
+        <span class="legend-label">${t} ${(w * 100).toFixed(0)}%</span>
       </div>`).join('');
     resetDonutCenter();
     // Bidirectional hover: hovering a slice or its legend entry highlights both.
@@ -507,10 +592,6 @@
   function renderMetrics(data) {
     const wf = data.backtest_walkforward || {};
     const is = data.backtest_in_sample || {};
-    // backtest_walkforward is always present as an object, so a plain
-    // `wf || is` would never fall back; pick per-field instead, using the
-    // in-sample value only when the walk-forward field is null (e.g. when
-    // there wasn't enough history to run a walk-forward).
     const pick = (k) => (wf[k] != null ? wf[k] : is[k]);
     const r = pick('cagr');     // annualized return
     const v = pick('vol');      // annualized volatility
@@ -543,36 +624,36 @@
   function renderResults(data, portfolioValue) {
     const allTickers = Object.keys(data.weights);
     const invalid = new Set(data.invalid_tickers || []);
-    // "Current weight" is the equal-weight baseline across the valid tickers
-    // (the app doesn't track real holdings); the Action column says how to move
-    // from that baseline to the optimal weight.
+    // "Current" is the equal-weight baseline across the valid tickers (the app
+    // doesn't track real holdings); Action says how to move to the optimal weight.
     const validCount = allTickers.filter((t) => !invalid.has(t)).length || 1;
     const current = 1 / validCount;
     const rows = allTickers.map((t) => {
       const w = data.weights[t];
       const target = w * portfolioValue;
       const isInvalid = invalid.has(t);
-      let curStr = '—', action = '—', cls = 'text-on-surface-variant', icon = '';
+      let curStr = '—', action = 'HOLD', pillCls = 'pill-hold', icon = 'remove';
       if (!isInvalid) {
         curStr = pct(current);
         const diff = w - current;
-        if (diff > 0.005)      { action = 'BUY';  cls = 'text-[#10B981]'; icon = 'arrow_upward'; }
-        else if (diff < -0.005) { action = 'SELL'; cls = 'text-[#EF4444]'; icon = 'arrow_downward'; }
-        else                    { action = 'HOLD'; cls = 'text-on-surface-variant'; icon = 'remove'; }
+        if (diff > 0.005)      { action = 'BUY';  pillCls = 'pill-buy';  icon = 'arrow_upward'; }
+        else if (diff < -0.005) { action = 'SELL'; pillCls = 'pill-sell'; icon = 'arrow_downward'; }
       }
-      const iconHtml = icon ? `<span class="material-symbols-outlined text-sm">${icon}</span>` : '';
-      return `<tr class="hover:bg-[#F1F5F9] transition-colors border-b border-outline-variant">
-        <td class="p-4 font-mono-data text-mono-data font-bold">${t}</td>
-        <td class="p-4 font-mono-data text-mono-data text-right text-on-surface-variant">${curStr}</td>
-        <td class="p-4 font-mono-data text-mono-data text-right text-primary font-bold">${pct(w)}</td>
-        <td class="p-4 font-mono-data text-mono-data text-right">${fmtMoney(target)}</td>
-        <td class="p-4 font-mono-data text-mono-data text-right ${cls}"><span class="inline-flex items-center justify-end gap-1">${iconHtml}${action}</span></td>
+      const pill = isInvalid
+        ? '<span class="pill pill-hold">—</span>'
+        : `<span class="pill ${pillCls}"><span class="material-symbols-outlined">${icon}</span>${action}</span>`;
+      return `<tr class="trow">
+        <td class="td td-l" style="font-weight:600;color:#EDF1F5;">${t}</td>
+        <td class="td td-r" style="color:#8A94A2;">${curStr}</td>
+        <td class="td td-r" style="font-weight:600;color:var(--acc);">${pct(w)}</td>
+        <td class="td td-r" style="color:#DCE3EB;">${fmtMoney(target)}</td>
+        <td class="td td-r td-last">${pill}</td>
       </tr>`;
     }).join('');
     $('resultsBody').innerHTML = rows;
     if (data.timestamp || data.interval) {
       $('dataMeta').classList.remove('hidden');
-      $('dataMeta').innerHTML = `<span class="text-[#10B981] font-semibold">Data as of:</span> ${data.timestamp ?? '—'} &nbsp;&nbsp; <span class="text-[#10B981] font-semibold">Interval:</span> ${data.interval ?? '—'}`;
+      $('dataMeta').innerHTML = `<span><span style="color:var(--acc);font-weight:600;">Data as of:</span> ${data.timestamp ?? '—'}</span><span><span style="color:var(--acc);font-weight:600;">Interval:</span> ${data.interval ?? '—'}</span>`;
     }
     renderDonut(data.weights);
     renderMetrics(data);
@@ -617,35 +698,33 @@
     // and blank out the whole history view.
     const entries = (historyCache || []).filter((e) => e && e.raw && e.raw.weights);
     if (!entries.length) {
-      $('historyList').innerHTML = '<p class="font-body-sm text-body-sm text-on-surface-variant text-center py-6">No optimizations yet — run one from the Optimizer and it will show up here.</p>';
+      $('historyList').innerHTML = '<p style="text-align:center;padding:30px;font-size:13px;color:#6B7482;">No optimizations yet — run one from the Optimizer and it will show up here.</p>';
       return;
     }
     $('historyList').innerHTML = entries.map((e) => {
       const pv = Number(e.portfolioValue).toLocaleString();
       const tickerList = Object.keys(e.raw.weights).join(', ');
-      return `<div class="border border-outline-variant rounded-lg overflow-hidden">
-        <div class="flex items-center justify-between p-4 cursor-pointer hover:bg-surface-container-low transition-colors" data-toggle>
-          <div class="flex items-center gap-4 flex-wrap">
-            <span class="font-mono-data text-mono-data text-[#2563EB] font-semibold">${tickerList}</span>
-            <span class="font-body-sm text-body-sm text-on-surface-variant">$${pv}</span>
+      const strat = e.raw.strategy ? (STRAT_LABEL[e.raw.strategy] || e.raw.strategy) : '';
+      return `<div class="hist">
+        <div class="hist-head" data-toggle>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;min-width:0;">
+            <span class="mono" style="font-size:13px;font-weight:600;color:var(--acc);">${tickerList}</span>
+            <span style="font-size:12.5px;color:#8A94A2;">$${pv}</span>
+            ${strat ? `<span class="hist-tag">${strat}</span>` : ''}
           </div>
-          <span class="font-body-sm text-body-sm text-on-surface-variant whitespace-nowrap">${e.date}</span>
+          <span style="font-size:12px;color:#6B7482;white-space:nowrap;">${e.date}</span>
         </div>
-        <div class="hidden border-t border-outline-variant" data-body>
-          <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
-              <thead><tr class="bg-[#F8FAFC]">
-                <th class="p-3 font-mono-data text-[11px] uppercase text-[#0F172A]">Ticker</th>
-                <th class="p-3 font-mono-data text-[11px] uppercase text-[#0F172A] text-right">Weight</th>
-                <th class="p-3 font-mono-data text-[11px] uppercase text-[#0F172A] text-right">Target Value</th>
-              </tr></thead>
-              <tbody>${Object.keys(e.raw.weights).map((t) => `<tr class="border-b border-outline-variant last:border-0">
-                <td class="p-3 font-mono-data text-mono-data font-bold">${t}</td>
-                <td class="p-3 font-mono-data text-mono-data text-right">${pct(e.raw.weights[t])}</td>
-                <td class="p-3 font-mono-data text-mono-data text-right">${fmtMoney(e.raw.weights[t] * Number(e.portfolioValue))}</td>
-              </tr>`).join('')}</tbody>
-            </table>
-          </div>
+        <div class="hidden" data-body style="border-top:1px solid rgba(255,255,255,0.07);overflow-x:auto;">
+          <table class="tbl">
+            <thead><tr class="thead-row">
+              <th class="th th-l">Ticker</th><th class="th">Weight</th><th class="th th-last">Target Value</th>
+            </tr></thead>
+            <tbody>${Object.keys(e.raw.weights).map((t) => `<tr class="trow">
+              <td class="td td-l" style="font-weight:600;color:#EDF1F5;">${t}</td>
+              <td class="td td-r" style="color:#DCE3EB;">${pct(e.raw.weights[t])}</td>
+              <td class="td td-r td-last" style="color:#8A94A2;">${fmtMoney(e.raw.weights[t] * Number(e.portfolioValue))}</td>
+            </tr>`).join('')}</tbody>
+          </table>
         </div>
       </div>`;
     }).join('');
@@ -737,13 +816,7 @@
   // "dashboard" and "optimizer" both show the main workspace; "history" shows
   // the saved-runs view. Each nav item highlights itself when active.
   function setNavActive(view) {
-    document.querySelectorAll('.nav-link[data-view]').forEach((l) => {
-      const active = l.dataset.view === view;
-      l.classList.toggle('bg-surface-container-low', active);
-      l.classList.toggle('text-primary', active);
-      l.classList.toggle('font-bold', active);
-      l.classList.toggle('text-on-surface-variant', !active);
-    });
+    document.querySelectorAll('.nav-link[data-view]').forEach((l) => l.classList.toggle('active', l.dataset.view === view));
   }
   function showView(view) {
     const isHistory = view === 'history';
@@ -764,7 +837,7 @@
   });
   $('newOptimizationBtn').onclick = () => {
     showView('optimizer');
-    $('resultsBody').innerHTML = '<tr><td colspan="5" class="p-8 text-center font-body-sm text-body-sm text-on-surface-variant">No results yet — enter tickers and click Optimize Portfolio.</td></tr>';
+    $('resultsBody').innerHTML = '<tr><td colspan="5" class="empty-cell">No results yet — enter tickers and click Optimize Portfolio.</td></tr>';
     $('statusMessage').textContent = '';
     $('tickerInput').focus();
   };
@@ -816,6 +889,7 @@
     if (signedIn) {
       $('userBadgeName').textContent = authState.user.name;
       $('userBadgeEmail').textContent = authState.user.email || '';
+      $('userBadgeAvatar').textContent = (authState.user.name || authState.user.email || 'U').trim().charAt(0).toUpperCase();
     }
   }
 
